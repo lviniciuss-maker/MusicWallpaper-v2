@@ -1,5 +1,8 @@
 # 🎵 MusicWallpaper
 
+<img width="1536" height="1608" alt="Gemini_Generated_Image_gd970mgd970mgd97" src="https://github.com/user-attachments/assets/1dfaa0a7-2d80-4227-92f5-fdca69b0e3e4" />
+
+
 <p align="center">
   <b>Live lockscreen animated artwork with silky-smooth frosted glass blur and background music detection for Android.</b><br>
   <i>Capas de álbuns animadas na tela de bloqueio com efeito de vidro fosco (blur) espelhado e detecção automática de players.</i>
