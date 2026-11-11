@@ -10,6 +10,10 @@
 
 ---
 
+**IF YOU WANT TO BUY ME A COFFEE ☕**
+PIX (BRAZILIAN): f73342e6-86cb-412c-aa5f-1ea2f1faf763
+PAYPAL: https://www.paypal.com/donate/?business=6J6ACS6XFSFYE&no_recurring=0&currency_code=BRL
+
 ## 🌟 Features / Funcionalidades
 
 - **Animated & Static Artwork (`.m3u8` & High-Res):** Automatically fetches animated vertical artwork (3:4 `url_tall`) from Apple Music via the `artwork.m8tec.top` API, with seamless fallback to high-resolution static album covers.
