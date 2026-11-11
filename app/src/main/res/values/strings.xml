@@ -1,0 +1,26 @@
+<resources>
+    <string name="app_name">MusicWallpaper</string>
+    <string name="app_subtitle">Live Lockscreen Animated Artwork</string>
+
+    <string name="card_perm_title">1. Music Detection</string>
+    <string name="card_perm_desc">Allow the app to detect songs playing on Apple Music, Spotify, YouTube Music, Tidal, Amazon Music, Bitchord, and Cider.</string>
+    <string name="perm_status_ok">● Permission Granted</string>
+    <string name="perm_status_missing">● Permission Required</string>
+    <string name="btn_grant_perm">Configure Permission</string>
+
+    <string name="card_photo_title">2. Standby Wallpaper</string>
+    <string name="card_photo_desc">Displayed automatically 5 seconds after music is paused.</string>
+    <string name="btn_pick_photo">Choose Photo from Gallery</string>
+    <string name="status_photo_ok">✅ Custom standby photo active</string>
+    <string name="status_photo_none">ℹ️ No custom photo selected yet</string>
+    <string name="chooser_title">Select a wallpaper photo</string>
+    <string name="toast_photo_saved">Standby photo saved successfully!</string>
+
+    <string name="card_pos_title">3. Artwork &amp; Blur Adjustments</string>
+    <string name="pos_label_format">Vertical Position (from top): %1$d%%</string>
+    <string name="blur_label_format">Blur Intensity: %1$d%%</string>
+    <string name="btn_reset_pos">Reset Adjustments (20% Pos | 100% Blur)</string>
+
+    <string name="btn_activate_wallpaper">Activate Live Wallpaper</string>
+    <string name="toast_error_generic">Could not open system screen</string>
+</resources>

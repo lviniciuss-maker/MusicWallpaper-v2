@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Sombra Suave de Elevação Central -->
+    <path
+        android:pathData="M34,26 L74,26 A8,8 0 0,1 82,34 L82,78 A8,8 0 0,1 74,86 L34,86 A8,8 0 0,1 26,78 L26,34 A8,8 0 0,1 34,26 Z"
+        android:fillColor="#40000000" />
+
+    <!-- Disco de Vinil Estilizado (Deslocado no topo para representar o movimento/animação) -->
+    <path
+        android:pathData="M54,46 m-21,0 a21,21 0 1,0 42,0 a21,21 0 1,0 -42,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="33"
+                android:startY="25"
+                android:endX="75"
+                android:endY="67"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#282C3E" />
+                <item android:offset="0.45" android:color="#11131C" />
+                <item android:offset="0.55" android:color="#2E3348" />
+                <item android:offset="1.0" android:color="#0C0E14" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Brilho Especular da Borda do Vinil -->
+    <path
+        android:pathData="M54,46 m-20.5,0 a20.5,20.5 0 1,0 41,0 a20.5,20.5 0 1,0 -41,0"
+        android:strokeWidth="0.7"
+        android:strokeColor="#4DFFFFFF"
+        android:fillColor="#00000000" />
+
+    <!-- Microssulcos Acústicos Concêntricos -->
+    <path
+        android:pathData="M54,46 m-16.5,0 a16.5,16.5 0 1,0 33,0 a16.5,16.5 0 1,0 -33,0"
+        android:strokeWidth="0.5"
+        android:strokeColor="#298AB4F8"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M54,46 m-13,0 a13,13 0 1,0 26,0 a13,13 0 1,0 -26,0"
+        android:strokeWidth="0.5"
+        android:strokeColor="#33FF6B8B"
+        android:fillColor="#00000000" />
+
+    <!-- Selo Central Luminescente do Vinil (Cores da Capa) -->
+    <path
+        android:pathData="M54,46 m-7.5,0 a7.5,7.5 0 1,0 15,0 a7.5,7.5 0 1,0 -15,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="46"
+                android:startY="38"
+                android:endX="62"
+                android:endY="54"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#8AB4F8" />
+                <item android:offset="0.5" android:color="#C58AF9" />
+                <item android:offset="1.0" android:color="#FF6B8B" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Furo Central do Disco -->
+    <path
+        android:pathData="M54,46 m-2.2,0 a2.2,2.2 0 1,0 4.4,0 a2.2,2.2 0 1,0 -4.4,0"
+        android:fillColor="#0D0F14" />
+
+    <!-- Painel Frontal de Vidro Fosco 3:4 (Representando o Blur Espelhado na Base!) -->
+    <path
+        android:pathData="M33,50 L75,50 A6,6 0 0,1 81,56 L81,74 A9,9 0 0,1 72,83 L36,83 A9,9 0 0,1 27,74 L27,56 A6,6 0 0,1 33,50 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="54"
+                android:startY="50"
+                android:endX="54"
+                android:endY="83"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#CC1A1E2E" />
+                <item android:offset="0.5" android:color="#E6141724" />
+                <item android:offset="1.0" android:color="#F50E101A" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Ondas Horizontais Difusas (Representando o Reflexo Espelhado em Blur na parte inferior) -->
+    <path
+        android:pathData="M34,58 L74,58"
+        android:strokeWidth="3.2"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="34"
+                android:startY="58"
+                android:endX="74"
+                android:endY="58"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#338AB4F8" />
+                <item android:offset="0.5" android:color="#CC8AB4F8" />
+                <item android:offset="1.0" android:color="#33FF6B8B" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <path
+        android:pathData="M38,65 L70,65"
+        android:strokeWidth="2.8"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="38"
+                android:startY="65"
+                android:endX="70"
+                android:endY="65"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#22C58AF9" />
+                <item android:offset="0.5" android:color="#99C58AF9" />
+                <item android:offset="1.0" android:color="#22FF6B8B" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <path
+        android:pathData="M43,72 L65,72"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="43"
+                android:startY="72"
+                android:endX="65"
+                android:endY="72"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#15FF6B8B" />
+                <item android:offset="0.5" android:color="#66FF6B8B" />
+                <item android:offset="1.0" android:color="#158AB4F8" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Moldura Arquitetônica 3:4 Completa (Borda Fina de Vidro Iluminado) -->
+    <path
+        android:pathData="M36,24 L72,24 A9,9 0 0,1 81,33 L81,74 A9,9 0 0,1 72,83 L36,83 A9,9 0 0,1 27,74 L27,33 A9,9 0 0,1 36,24 Z"
+        android:strokeWidth="1.3"
+        android:fillColor="#00000000">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="27"
+                android:startY="24"
+                android:endX="81"
+                android:endY="83"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#B3FFFFFF" />
+                <item android:offset="0.45" android:color="#4D8AB4F8" />
+                <item android:offset="1.0" android:color="#66FF6B8B" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+</vector>

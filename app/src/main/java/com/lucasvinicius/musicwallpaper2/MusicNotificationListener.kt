@@ -1,0 +1,5 @@
+package com.lucasvinicius.musicwallpaper2
+
+import android.service.notification.NotificationListenerService
+
+class MusicNotificationListener : NotificationListenerService()

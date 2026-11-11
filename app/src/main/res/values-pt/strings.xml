@@ -1,0 +1,26 @@
+<resources>
+    <string name="app_name">MusicWallpaper</string>
+    <string name="app_subtitle">Capas Animadas na Tela de Bloqueio</string>
+
+    <string name="card_perm_title">1. Detecção de Música</string>
+    <string name="card_perm_desc">Permite identificar a música tocando no Apple Music, Spotify, YouTube Music, Tidal, Amazon Music, Bitchord e Cider.</string>
+    <string name="perm_status_ok">● Permissão Concedida</string>
+    <string name="perm_status_missing">● Permissão Pendente</string>
+    <string name="btn_grant_perm">Configurar Permissão</string>
+
+    <string name="card_photo_title">2. Papel de Parede de Espera</string>
+    <string name="card_photo_desc">Exibido automaticamente 5 segundos após pausar a música.</string>
+    <string name="btn_pick_photo">Escolher Foto da Galeria</string>
+    <string name="status_photo_ok">✅ Foto personalizada ativa</string>
+    <string name="status_photo_none">ℹ️ Nenhuma foto escolhida ainda</string>
+    <string name="chooser_title">Escolha uma foto</string>
+    <string name="toast_photo_saved">Foto padrão salva com sucesso!</string>
+
+    <string name="card_pos_title">3. Ajustes da Capa e Blur</string>
+    <string name="pos_label_format">Posição Vertical (do topo): %1$d%%</string>
+    <string name="blur_label_format">Intensidade do Blur: %1$d%%</string>
+    <string name="btn_reset_pos">Restaurar Padrão (20% Pos | 100% Blur)</string>
+
+    <string name="btn_activate_wallpaper">Ativar Papel de Parede</string>
+    <string name="toast_error_generic">Não foi possível abrir a tela do sistema</string>
+</resources>

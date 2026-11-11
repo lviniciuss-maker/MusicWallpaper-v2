@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Base Obsidiana Profunda -->
+    <path
+        android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="108"
+                android:endY="108"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#08090E" />
+                <item android:offset="0.5" android:color="#10131E" />
+                <item android:offset="1.0" android:color="#07080C" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Aurora Superior (Luz Ciano/Azul Elétrico Difusa) -->
+    <path
+        android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="32"
+                android:centerY="26"
+                android:gradientRadius="68"
+                android:type="radial">
+                <item android:offset="0.0" android:color="#664E8CFF" />
+                <item android:offset="0.55" android:color="#223866D6" />
+                <item android:offset="1.0" android:color="#0008090E" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Aurora Inferior (Reflexo Espelhado Magenta/Coral Quente) -->
+    <path
+        android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="76"
+                android:centerY="82"
+                android:gradientRadius="65"
+                android:type="radial">
+                <item android:offset="0.0" android:color="#77FF4D79" />
+                <item android:offset="0.45" android:color="#33B829FF" />
+                <item android:offset="1.0" android:color="#0007080C" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+</vector>
