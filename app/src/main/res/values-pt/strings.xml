@@ -3,10 +3,14 @@
     <string name="app_subtitle">Capas Animadas na Tela de Bloqueio</string>
 
     <string name="card_perm_title">1. Detecção de Música</string>
-    <string name="card_perm_desc">Permite identificar a música tocando no Apple Music, Spotify, YouTube Music, Tidal, Amazon Music, Bitchord e Cider.</string>
+    <string name="card_perm_desc">Detecta mídias tocando em qualquer app do celular. Use a lista de exceção abaixo para ignorar apps específicos (como YouTube ou navegadores).</string>
     <string name="perm_status_ok">● Permissão Concedida</string>
     <string name="perm_status_missing">● Permissão Pendente</string>
     <string name="btn_grant_perm">Configurar Permissão</string>
+    <string name="btn_excluded_apps">Apps Ignorados (%1$d)</string>
+    <string name="dialog_excluded_title">Escolha os Apps para Ignorar</string>
+    <string name="search_apps_hint">Pesquisar aplicativo...</string>
+    <string name="btn_done">Concluir</string>
 
     <string name="card_photo_title">2. Papel de Parede de Espera</string>
     <string name="card_photo_desc">Exibido automaticamente 5 segundos após pausar a música.</string>
@@ -23,4 +27,8 @@
 
     <string name="btn_activate_wallpaper">Ativar Papel de Parede</string>
     <string name="toast_error_generic">Não foi possível abrir a tela do sistema</string>
+    <string name="crop_dialog_title">Ajustar Papel de Parede</string>
+    <string name="crop_dialog_hint">Arraste com 1 dedo para mover • Pinça com 2 dedos para zoom</string>
+    <string name="btn_save_crop">Salvar Papel de Parede</string>
+    <string name="btn_cancel">Cancelar</string>
 </resources>

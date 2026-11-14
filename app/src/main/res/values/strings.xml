@@ -3,10 +3,14 @@
     <string name="app_subtitle">Live Lockscreen Animated Artwork</string>
 
     <string name="card_perm_title">1. Music Detection</string>
-    <string name="card_perm_desc">Allow the app to detect songs playing on Apple Music, Spotify, YouTube Music, Tidal, Amazon Music, Bitchord, and Cider.</string>
+    <string name="card_perm_desc">Detects media playing from any app on your device. Use the exception list below to ignore specific apps (like YouTube or browsers).</string>
     <string name="perm_status_ok">● Permission Granted</string>
     <string name="perm_status_missing">● Permission Required</string>
     <string name="btn_grant_perm">Configure Permission</string>
+    <string name="btn_excluded_apps">Ignored Apps (%1$d)</string>
+    <string name="dialog_excluded_title">Select Apps to Ignore</string>
+    <string name="search_apps_hint">Search app name...</string>
+    <string name="btn_done">Done</string>
 
     <string name="card_photo_title">2. Standby Wallpaper</string>
     <string name="card_photo_desc">Displayed automatically 5 seconds after music is paused.</string>
@@ -23,4 +27,8 @@
 
     <string name="btn_activate_wallpaper">Activate Live Wallpaper</string>
     <string name="toast_error_generic">Could not open system screen</string>
+    <string name="crop_dialog_title">Adjust Standby Wallpaper</string>
+    <string name="crop_dialog_hint">Drag with 1 finger to move • Pinch with 2 fingers to zoom</string>
+    <string name="btn_save_crop">Save Wallpaper</string>
+    <string name="btn_cancel">Cancel</string>
 </resources>

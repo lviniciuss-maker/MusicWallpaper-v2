@@ -85,11 +85,12 @@ class BlurVideoWallpaperService : WallpaperService() {
         private var mediaWidth = 1080
         private var mediaHeight = 1440
 
-        // Preferências dinâmicas do usuário (Posição Vertical e Intensidade do Blur)
+        // Preferências dinâmicas do usuário (Posição Vertical, Intensidade do Blur e Lista de Exceção)
         private var userTopOffset = 0.20f
         private var userBlurScale = 1.00f
+        private var excludedPackages: Set<String> = emptySet()
 
-        // 0 = Foto padrão da galeria
+        // 0 = Foto padrão da galeria (PNG 100% Lossless Pixel-Perfect)
         // 1 = Capa estática da música (cortada nas laterais para caber na caixa 3:4) com Blur espelhado
         // 2 = Capa animada .m3u8 (3:4 nativa ou 1:1 cortada nas laterais para caixa 3:4) com Blur espelhado
         private var displayMode = 0
@@ -141,6 +142,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                         }
                         "com.lucasvinicius.musicwallpaper2.ACTION_SETTINGS_UPDATED" -> {
                             loadUserPreferences()
+                            checkCurrentMusic()
                             drawFrame(updateTex = false)
                         }
                     }
@@ -213,6 +215,8 @@ class BlurVideoWallpaperService : WallpaperService() {
 
             val blurPercent = prefs.getInt("blur_strength_percent", 100).coerceIn(60, 100)
             userBlurScale = blurPercent / 100f
+
+            excludedPackages = prefs.getStringSet("excluded_packages", emptySet())?.toSet() ?: emptySet()
         }
 
         private fun registerUpdatesReceiver() {
@@ -290,19 +294,6 @@ class BlurVideoWallpaperService : WallpaperService() {
             checkCurrentMusic()
         }
 
-        // Verifica se a sessão pertence a um dos apps de streaming de música suportados
-        // (incluindo Bitchord e Cider!)
-        private fun isSupportedMusicApp(packageName: String): Boolean {
-            return packageName in SUPPORTED_MUSIC_PACKAGES ||
-                    packageName.contains("apple.android.music", ignoreCase = true) ||
-                    packageName.contains("spotify", ignoreCase = true) ||
-                    packageName.contains("youtube.music", ignoreCase = true) ||
-                    packageName.contains("tidal", ignoreCase = true) ||
-                    packageName.contains("amazon.mp3", ignoreCase = true) ||
-                    packageName.contains("bitchord", ignoreCase = true) ||
-                    packageName.contains("cider", ignoreCase = true)
-        }
-
         private fun isActivePlaybackState(state: Int?): Boolean {
             return state == PlaybackState.STATE_PLAYING ||
                     state == PlaybackState.STATE_BUFFERING ||
@@ -317,12 +308,8 @@ class BlurVideoWallpaperService : WallpaperService() {
                 val componentName = ComponentName(this@BlurVideoWallpaperService, MusicNotificationListener::class.java)
                 val controllers = mediaSessionManager?.getActiveSessions(componentName) ?: controllerCallbacks.keys.toList()
 
-                // 1º Procura nos apps suportados (Spotify, Apple Music, YT Music, Tidal, Amazon, Bitchord e Cider)
                 val playingController = controllers.firstOrNull {
-                    isSupportedMusicApp(it.packageName) && isActivePlaybackState(it.playbackState?.state)
-                } ?: controllers.firstOrNull {
-                    // Reserva caso o usuário use uma variante/clone de algum player de música
-                    isActivePlaybackState(it.playbackState?.state)
+                    it.packageName !in excludedPackages && isActivePlaybackState(it.playbackState?.state)
                 }
 
                 if (playingController == null) {
@@ -336,7 +323,6 @@ class BlurVideoWallpaperService : WallpaperService() {
                     return
                 }
 
-                // Leitura compatível com todos os players (inclusive Bitchord e Cider, que podem usar DISPLAY_TITLE / SUBTITLE)
                 val title = (
                         metadata.getString(MediaMetadata.METADATA_KEY_TITLE)
                             ?: metadata.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE)
@@ -358,7 +344,6 @@ class BlurVideoWallpaperService : WallpaperService() {
                             ?: ""
                         ).trim()
 
-                // Alguns clientes como Cider/Bitchord às vezes enviam "Artista - Álbum" juntos no subtítulo
                 if (album.isEmpty() && artist.contains(" - ")) {
                     val parts = artist.split(" - ", limit = 2)
                     artist = parts[0].trim()
@@ -449,11 +434,11 @@ class BlurVideoWallpaperService : WallpaperService() {
             }
         }
 
-        private fun makeGlSafeBitmap(src: Bitmap?): Bitmap? {
+        private fun makeGlSafeBitmap(src: Bitmap?, maxAllowedDim: Int = 1400): Bitmap? {
             if (src == null || src.isRecycled || src.width <= 0 || src.height <= 0) return null
             return try {
                 val maxDim = max(src.width, src.height)
-                val scale = if (maxDim > 1400) 1400f / maxDim else 1f
+                val scale = if (maxDim > maxAllowedDim) maxAllowedDim.toFloat() / maxDim else 1f
                 val targetW = (src.width * scale).toInt().coerceAtLeast(1)
                 val targetH = (src.height * scale).toInt().coerceAtLeast(1)
 
@@ -477,15 +462,18 @@ class BlurVideoWallpaperService : WallpaperService() {
 
         private fun showDefaultWallpaper() {
             try {
-                val file = File(filesDir, "default_wallpaper.jpg")
+                val pngFile = File(filesDir, "default_wallpaper.png")
+                val jpgFile = File(filesDir, "default_wallpaper.jpg")
+                val file = if (pngFile.exists()) pngFile else jpgFile
+
                 if (file.exists()) {
                     val options = BitmapFactory.Options().apply {
                         inPreferredConfig = Bitmap.Config.ARGB_8888
+                        inScaled = false // Carrega 1:1 os pixels exatos sem redimensionamento de DPI!
                     }
                     val raw = BitmapFactory.decodeFile(file.absolutePath, options)
-                    val safeBitmap = makeGlSafeBitmap(raw)
-                    if (safeBitmap != null) {
-                        uploadStaticBitmapToOpenGL(safeBitmap, isDefaultFullWallpaper = true)
+                    if (raw != null) {
+                        uploadStaticBitmapToOpenGL(raw, isDefaultFullWallpaper = true)
                         return
                     }
                 }
@@ -540,6 +528,13 @@ class BlurVideoWallpaperService : WallpaperService() {
             }
         }
 
+        private fun isArtistMatch(expectedArtist: String, returnedArtist: String): Boolean {
+            val exp = expectedArtist.lowercase().replace(Regex("[^a-z0-9가-힣一-龯ぁ-んァ-ン]"), "")
+            val ret = returnedArtist.lowercase().replace(Regex("[^a-z0-9가-힣一-龯ぁ-んァ-ン]"), "")
+            if (exp.isEmpty() || ret.isEmpty()) return true
+            return ret.contains(exp) || exp.contains(ret)
+        }
+
         private fun fetchCoverForTrack(
             trackKey: String,
             artist: String,
@@ -560,19 +555,28 @@ class BlurVideoWallpaperService : WallpaperService() {
 
                     if (cleanAlbum.isNotEmpty()) {
                         val encAlbum = URLEncoder.encode(cleanAlbum, "UTF-8")
-                        m3u8Found = requestM3u8FromEndpoint("https://artwork.m8tec.top/api/v1/artwork/search?artist=$encArtist&album=$encAlbum")
+                        m3u8Found = requestM3u8FromEndpoint(
+                            "https://artwork.m8tec.top/api/v1/artwork/search?artist=$encArtist&album=$encAlbum",
+                            cleanArtist
+                        )
                     }
 
                     if (m3u8Found == null && cleanTitle.isNotEmpty() && !cleanTitle.equals(cleanAlbum, ignoreCase = true)) {
                         val encTitle = URLEncoder.encode(cleanTitle, "UTF-8")
-                        m3u8Found = requestM3u8FromEndpoint("https://artwork.m8tec.top/api/v1/artwork/search?artist=$encArtist&album=$encTitle")
+                        m3u8Found = requestM3u8FromEndpoint(
+                            "https://artwork.m8tec.top/api/v1/artwork/search?artist=$encArtist&album=$encTitle",
+                            cleanArtist
+                        )
                     }
 
                     if (m3u8Found == null) {
                         val itunesAlbum = findOfficialAlbumOnItunes(cleanArtist, cleanTitle.ifEmpty { cleanAlbum })
                         if (itunesAlbum != null && !itunesAlbum.equals(cleanAlbum, ignoreCase = true)) {
                             val encItunesAlbum = URLEncoder.encode(itunesAlbum, "UTF-8")
-                            m3u8Found = requestM3u8FromEndpoint("https://artwork.m8tec.top/api/v1/artwork/search?artist=$encArtist&album=$encItunesAlbum")
+                            m3u8Found = requestM3u8FromEndpoint(
+                                "https://artwork.m8tec.top/api/v1/artwork/search?artist=$encArtist&album=$encItunesAlbum",
+                                cleanArtist
+                            )
                         }
                     }
 
@@ -610,16 +614,22 @@ class BlurVideoWallpaperService : WallpaperService() {
         private fun findOfficialAlbumOnItunes(artist: String, trackOrAlbum: String): String? {
             return try {
                 val term = URLEncoder.encode("$artist $trackOrAlbum", "UTF-8")
-                val url = URL("https://itunes.apple.com/search?term=$term&entity=song&limit=1")
+                val url = URL("https://itunes.apple.com/search?term=$term&entity=song&limit=5")
                 val conn = (url.openConnection() as HttpURLConnection).apply {
                     connectTimeout = 4000
                     readTimeout = 4000
                 }
                 val json = JSONObject(conn.inputStream.bufferedReader().readText())
-                val results = json.optJSONArray("results")
-                if (results != null && results.length() > 0) {
-                    results.getJSONObject(0).optString("collectionName").takeIf { it.isNotEmpty() }
-                } else null
+                val results = json.optJSONArray("results") ?: return null
+                for (i in 0 until results.length()) {
+                    val item = results.getJSONObject(i)
+                    val foundArtist = item.optString("artistName")
+                    val collectionName = item.optString("collectionName")
+                    if (collectionName.isNotEmpty() && isArtistMatch(artist, foundArtist)) {
+                        return collectionName
+                    }
+                }
+                null
             } catch (_: Throwable) {
                 null
             }
@@ -629,7 +639,7 @@ class BlurVideoWallpaperService : WallpaperService() {
             return try {
                 val queryText = if (album.isNotEmpty()) "$artist $album" else "$artist $title"
                 val term = URLEncoder.encode(queryText, "UTF-8")
-                val url = URL("https://itunes.apple.com/search?term=$term&entity=song&limit=2")
+                val url = URL("https://itunes.apple.com/search?term=$term&entity=song&limit=5")
                 val conn = (url.openConnection() as HttpURLConnection).apply {
                     connectTimeout = 4000
                     readTimeout = 4000
@@ -638,7 +648,16 @@ class BlurVideoWallpaperService : WallpaperService() {
                 val results = json.optJSONArray("results") ?: return null
                 if (results.length() == 0) return null
 
-                val artworkUrl100 = results.getJSONObject(0).optString("artworkUrl100")
+                var artworkUrl100 = ""
+                for (i in 0 until results.length()) {
+                    val item = results.getJSONObject(i)
+                    val foundArtist = item.optString("artistName")
+                    if (isArtistMatch(artist, foundArtist)) {
+                        artworkUrl100 = item.optString("artworkUrl100")
+                        if (artworkUrl100.isNotEmpty()) break
+                    }
+                }
+
                 if (artworkUrl100.isEmpty()) return null
 
                 val highResUrl = artworkUrl100.replace("100x100bb", "1000x1000bb")
@@ -655,7 +674,7 @@ class BlurVideoWallpaperService : WallpaperService() {
             }
         }
 
-        private fun requestM3u8FromEndpoint(urlString: String): String? {
+        private fun requestM3u8FromEndpoint(urlString: String, expectedArtist: String): String? {
             return try {
                 val conn = (URL(urlString).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 5000
@@ -667,6 +686,13 @@ class BlurVideoWallpaperService : WallpaperService() {
                 if (code !in 200..299) return null
 
                 val body = conn.inputStream.bufferedReader().readText()
+
+                val artistRegex = Regex(""""(?:artist|artistName|artist_name)"\s*:\s*"([^"]+)"""")
+                val returnedArtist = artistRegex.find(body)?.groupValues?.get(1)?.trim()
+                if (!returnedArtist.isNullOrEmpty() && !isArtistMatch(expectedArtist, returnedArtist)) {
+                    Log.d("BlurWallpaper", "Capa descartada! Esperado: $expectedArtist | Veio da API: $returnedArtist")
+                    return null
+                }
 
                 val tallFieldRegex = Regex(""""(?:url_tall|tall_url|tallUrl|editorialVideoTall)"\s*:\s*"(https:[^"]+\.m3u8)"""")
                 val tallMatch = tallFieldRegex.find(body)?.groupValues?.get(1)?.replace("\\/", "/")
@@ -951,17 +977,6 @@ class BlurVideoWallpaperService : WallpaperService() {
     }
 
     companion object {
-        // Lista oficial de pacotes dos players suportados (incluindo Bitchord e Cider)
-        private val SUPPORTED_MUSIC_PACKAGES = setOf(
-            "com.apple.android.music",               // Apple Music
-            "com.spotify.music",                     // Spotify
-            "com.google.android.apps.youtube.music", // YouTube Music
-            "com.aspiro.tidal",                      // Tidal
-            "com.amazon.mp3",                        // Amazon Music
-            "com.music.bitchord",                    // Bitchord
-            "com.cidercollective.cider"              // Cider
-        )
-
         private const val VERTEX_SHADER = """
             attribute vec4 aPosition;
             attribute vec2 aTexCoord;
@@ -1056,7 +1071,7 @@ class BlurVideoWallpaperService : WallpaperService() {
             }
         """
 
-        // Composição Final com Caixa 3:4 Padronizada e Corte Lateral (Center-Crop) sem deformar!
+        // Composição Final com Foto Padrão 1:1 Pixel-Perfect e Caixa 3:4 Padronizada para Músicas!
         private const val COMPOSITE_FRAGMENT_SHADER = """
             #extension GL_OES_EGL_image_external : require
             precision highp float;
@@ -1110,7 +1125,7 @@ class BlurVideoWallpaperService : WallpaperService() {
             void main() {
                 float screenY = 1.0 - vTexCoord.y;
 
-                // Modo 0: Papel de parede da galeria em tela cheia (quando sem música)
+                // Modo 0: Papel de parede da galeria com Nitidez Nativa (High-Precision Sharpening)
                 if (uMode == 0) {
                     float imgAspect = uVideoSize.x / max(uVideoSize.y, 1.0);
                     float screenAspect = uResolution.x / max(uResolution.y, 1.0);
@@ -1123,7 +1138,19 @@ class BlurVideoWallpaperService : WallpaperService() {
                         float scaleX = screenAspect / imgAspect;
                         uv.x = (uv.x - 0.5) * scaleX + 0.5;
                     }
-                    gl_FragColor = texture2D(sStaticTexture, clamp(uv, vec2(0.002), vec2(0.998)));
+
+                    // Passo de 1 pixel exato na resolução nativa da tela para reconstruir micro-detalhes (igual ao app Galeria)
+                    vec2 texel = vec2(1.0 / max(uResolution.x, 1080.0), 1.0 / max(uResolution.y, 2400.0));
+                    vec4 center = texture2D(sStaticTexture, uv);
+                    vec4 top    = texture2D(sStaticTexture, uv + vec2(0.0, -texel.y));
+                    vec4 bottom = texture2D(sStaticTexture, uv + vec2(0.0,  texel.y));
+                    vec4 left   = texture2D(sStaticTexture, uv + vec2(-texel.x, 0.0));
+                    vec4 right  = texture2D(sStaticTexture, uv + vec2( texel.x, 0.0));
+
+                    // Filtro de Nitidez (Unsharp Mask 5-tap calibrado para compensar a interpolação da GPU)
+                    vec4 neighbors = (top + bottom + left + right) * 0.25;
+                    vec4 sharpened = center + (center - neighbors) * 0.45;
+                    gl_FragColor = clamp(sharpened, 0.0, 1.0);
                     return;
                 }
 
