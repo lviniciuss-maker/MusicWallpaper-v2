@@ -27,8 +27,17 @@
 
     <string name="btn_activate_wallpaper">Ativar Papel de Parede</string>
     <string name="toast_error_generic">Não foi possível abrir a tela do sistema</string>
+
     <string name="crop_dialog_title">Ajustar Papel de Parede</string>
     <string name="crop_dialog_hint">Arraste com 1 dedo para mover • Pinça com 2 dedos para zoom</string>
     <string name="btn_save_crop">Salvar Papel de Parede</string>
     <string name="btn_cancel">Cancelar</string>
+
+    <string name="btn_check_updates">Verificar Atualizações (v%1$s)</string>
+    <string name="update_dialog_title">🚀 Nova Atualização Disponível (v%1$s)</string>
+    <string name="update_dialog_msg">Uma nova versão do MusicWallpaper foi lançada no GitHub!\n\n%1$s</string>
+    <string name="btn_download_update">Baixar APK</string>
+    <string name="btn_later">Depois</string>
+    <string name="toast_up_to_date">Você já está na versão mais recente (v%1$s)!</string>
+    <string name="toast_update_check_error">Não foi possível consultar o GitHub agora.</string>
 </resources>

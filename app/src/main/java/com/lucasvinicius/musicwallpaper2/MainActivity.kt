@@ -43,8 +43,11 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
+import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 import kotlin.concurrent.thread
 import kotlin.math.max
 
@@ -55,6 +58,10 @@ class MainActivity : AppCompatActivity() {
     private var statusText: TextView? = null
     private var previewImageView: ImageView? = null
     private val pickImageRequest = 1001
+
+    // Dados oficiais do seu repositório no GitHub
+    private val githubOwner = "lviniciuss-maker"
+    private val githubRepo = "MusicWallpaper-v2"
 
     data class AppItem(
         val name: String,
@@ -73,6 +80,7 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("wallpaper_prefs", MODE_PRIVATE)
         val savedOffsetPercent = prefs.getInt("top_offset_percent", 20).coerceIn(0, 40)
         val savedBlurPercent = prefs.getInt("blur_strength_percent", 100).coerceIn(60, 100)
+        val currentAppVersion = getInstalledVersionName()
 
         val scrollView = ScrollView(this).apply {
             setBackgroundColor(Color.parseColor("#0D0F14"))
@@ -310,11 +318,147 @@ class MainActivity : AppCompatActivity() {
         }
 
         rootLayout.addView(btnWallpaper)
+        rootLayout.addView(createSpacer(12))
+
+        // =========================================================================
+        // BOTÃO DE VERIFICAR ATUALIZAÇÕES NO GITHUB
+        // =========================================================================
+        val btnCheckUpdate = createSecondaryButton(getString(R.string.btn_check_updates, currentAppVersion)).apply {
+            setOnClickListener {
+                checkForGitHubUpdates(isManualCheck = true)
+            }
+        }
+        rootLayout.addView(btnCheckUpdate)
+
         scrollView.addView(rootLayout)
         setContentView(scrollView)
 
         updatePhotoStatusUI()
         updatePermissionStatusUI()
+
+        // Verifica silenciosamente ao abrir o app se saiu versão nova no GitHub
+        checkForGitHubUpdates(isManualCheck = false)
+    }
+
+    // =========================================================================
+    // VERIFICADOR DE ATUALIZAÇÕES DIRETO DO GITHUB RELEASES
+    // =========================================================================
+    private fun getInstalledVersionName(): String {
+        return try {
+            val pInfo = packageManager.getPackageInfo(packageName, 0)
+            pInfo.versionName ?: "1.0"
+        } catch (_: Throwable) {
+            "1.0"
+        }
+    }
+
+    private fun checkForGitHubUpdates(isManualCheck: Boolean) {
+        val currentVersion = getInstalledVersionName()
+        thread {
+            try {
+                val url = URL("https://api.github.com/repos/$githubOwner/$githubRepo/releases/latest")
+                val conn = (url.openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 6000
+                    readTimeout = 6000
+                    setRequestProperty("Accept", "application/vnd.github+json")
+                    setRequestProperty("User-Agent", "MusicWallpaper-Android")
+                }
+
+                if (conn.responseCode in 200..299) {
+                    val json = JSONObject(conn.inputStream.bufferedReader().readText())
+                    val latestTag = json.optString("tag_name", "").removePrefix("v").removePrefix("V").trim()
+                    val releaseUrl = json.optString("html_url", "https://github.com/$githubOwner/$githubRepo/releases")
+                    val releaseNotes = json.optString("body", "").trim()
+
+                    // Procura o link direto do arquivo .apk anexado nos Assets da Release
+                    var downloadUrl = releaseUrl
+                    val assets = json.optJSONArray("assets")
+                    if (assets != null) {
+                        for (i in 0 until assets.length()) {
+                            val assetObj = assets.getJSONObject(i)
+                            val browserUrl = assetObj.optString("browser_download_url", "")
+                            if (browserUrl.endsWith(".apk", ignoreCase = true)) {
+                                downloadUrl = browserUrl
+                                break
+                            }
+                        }
+                    }
+
+                    if (latestTag.isNotEmpty() && isNewerVersion(currentVersion, latestTag)) {
+                        val prefs = getSharedPreferences("wallpaper_prefs", MODE_PRIVATE)
+                        val lastDismissed = prefs.getString("dismissed_update_tag", "")
+
+                        // Se for checagem automática e o usuário já clicou em "Depois" para esta mesma versão, não incomoda de novo
+                        if (!isManualCheck && lastDismissed == latestTag) {
+                            return@thread
+                        }
+
+                        runOnUiThread {
+                            if (isFinishing || isDestroyed) return@runOnUiThread
+                            val notesPreview = if (releaseNotes.length > 500) {
+                                releaseNotes.take(500) + "..."
+                            } else {
+                                releaseNotes.ifEmpty { "Melhorias de desempenho e estabilidade." }
+                            }
+
+                            val dialog = AlertDialog.Builder(this)
+                                .setTitle(getString(R.string.update_dialog_title, latestTag))
+                                .setMessage(getString(R.string.update_dialog_msg, notesPreview))
+                                .setNegativeButton(getString(R.string.btn_later)) { d, _ ->
+                                    prefs.edit().putString("dismissed_update_tag", latestTag).apply()
+                                    d.dismiss()
+                                }
+                                .setPositiveButton(getString(R.string.btn_download_update)) { _, _ ->
+                                    try {
+                                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)))
+                                    } catch (_: Exception) {
+                                        Toast.makeText(this, getString(R.string.toast_error_generic), Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                                .create()
+
+                            dialog.show()
+                            dialog.window?.setBackgroundDrawable(GradientDrawable().apply {
+                                setColor(Color.parseColor("#181B24"))
+                                cornerRadius = dp(20).toFloat()
+                            })
+                        }
+                    } else if (isManualCheck) {
+                        runOnUiThread {
+                            Toast.makeText(this, getString(R.string.toast_up_to_date, currentVersion), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } else if (isManualCheck) {
+                    runOnUiThread {
+                        Toast.makeText(this, getString(R.string.toast_update_check_error), Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (_: Throwable) {
+                if (isManualCheck) {
+                    runOnUiThread {
+                        Toast.makeText(this, getString(R.string.toast_update_check_error), Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun isNewerVersion(current: String, latest: String): Boolean {
+        val cleanCurr = current.replace(Regex("[^0-9.]"), "")
+        val cleanLate = latest.replace(Regex("[^0-9.]"), "")
+        if (cleanCurr.isEmpty() || cleanLate.isEmpty()) return false
+
+        val currParts = cleanCurr.split(".").map { it.toIntOrNull() ?: 0 }
+        val lateParts = cleanLate.split(".").map { it.toIntOrNull() ?: 0 }
+        val maxLen = max(currParts.size, lateParts.size)
+
+        for (i in 0 until maxLen) {
+            val c = currParts.getOrElse(i) { 0 }
+            val l = lateParts.getOrElse(i) { 0 }
+            if (l > c) return true
+            if (l < c) return false
+        }
+        return false
     }
 
     // =========================================================================

@@ -12,8 +12,8 @@ android {
         applicationId = "com.lucasvinicius.musicwallpaper2"
         minSdk = 29
         targetSdk = 37
-        versionCode = 4
-        versionName = "1.3"
+        versionCode = 5
+        versionName = "1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

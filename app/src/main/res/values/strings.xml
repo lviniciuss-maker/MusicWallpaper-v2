@@ -27,8 +27,17 @@
 
     <string name="btn_activate_wallpaper">Activate Live Wallpaper</string>
     <string name="toast_error_generic">Could not open system screen</string>
+
     <string name="crop_dialog_title">Adjust Standby Wallpaper</string>
     <string name="crop_dialog_hint">Drag with 1 finger to move • Pinch with 2 fingers to zoom</string>
     <string name="btn_save_crop">Save Wallpaper</string>
     <string name="btn_cancel">Cancel</string>
+
+    <string name="btn_check_updates">Check for Updates (v%1$s)</string>
+    <string name="update_dialog_title">🚀 New Update Available (v%1$s)</string>
+    <string name="update_dialog_msg">A new version of MusicWallpaper is available on GitHub!\n\n%1$s</string>
+    <string name="btn_download_update">Download APK</string>
+    <string name="btn_later">Later</string>
+    <string name="toast_up_to_date">You are already using the latest version (v%1$s)!</string>
+    <string name="toast_update_check_error">Could not check GitHub updates right now.</string>
 </resources>

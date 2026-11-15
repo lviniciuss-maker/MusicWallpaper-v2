@@ -90,7 +90,7 @@ class BlurVideoWallpaperService : WallpaperService() {
         private var userBlurScale = 1.00f
         private var excludedPackages: Set<String> = emptySet()
 
-        // 0 = Foto padrão da galeria (PNG 100% Lossless Pixel-Perfect)
+        // 0 = Foto padrão da galeria (PNG 100% Lossless com Nitidez Nativa na GPU)
         // 1 = Capa estática da música (cortada nas laterais para caber na caixa 3:4) com Blur espelhado
         // 2 = Capa animada .m3u8 (3:4 nativa ou 1:1 cortada nas laterais para caixa 3:4) com Blur espelhado
         private var displayMode = 0
@@ -469,7 +469,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                 if (file.exists()) {
                     val options = BitmapFactory.Options().apply {
                         inPreferredConfig = Bitmap.Config.ARGB_8888
-                        inScaled = false // Carrega 1:1 os pixels exatos sem redimensionamento de DPI!
+                        inScaled = false // Carrega os pixels brutos exatos sem alteração de DPI!
                     }
                     val raw = BitmapFactory.decodeFile(file.absolutePath, options)
                     if (raw != null) {
@@ -528,11 +528,22 @@ class BlurVideoWallpaperService : WallpaperService() {
             }
         }
 
+        // Valida se o artista retornado corresponde ao artista tocando no player
         private fun isArtistMatch(expectedArtist: String, returnedArtist: String): Boolean {
             val exp = expectedArtist.lowercase().replace(Regex("[^a-z0-9가-힣一-龯ぁ-んァ-ン]"), "")
             val ret = returnedArtist.lowercase().replace(Regex("[^a-z0-9가-힣一-龯ぁ-んァ-ン]"), "")
             if (exp.isEmpty() || ret.isEmpty()) return true
             return ret.contains(exp) || exp.contains(ret)
+        }
+
+        // Valida se o título da música ou álbum retornado tem relação real com a faixa tocando (evita cair em outro álbum famoso do mesmo cantor)
+        private fun isTextMatch(expected: String, returned: String): Boolean {
+            val cleanExp = expected.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "")
+                .lowercase().replace(Regex("[^a-z0-9가-힣一-龯ぁ-んァ-ン]"), "")
+            val cleanRet = returned.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "")
+                .lowercase().replace(Regex("[^a-z0-9가-힣一-龯ぁ-んァ-ン]"), "")
+            if (cleanExp.isEmpty() || cleanRet.isEmpty()) return false
+            return cleanRet.contains(cleanExp) || cleanExp.contains(cleanRet)
         }
 
         private fun fetchCoverForTrack(
@@ -557,7 +568,8 @@ class BlurVideoWallpaperService : WallpaperService() {
                         val encAlbum = URLEncoder.encode(cleanAlbum, "UTF-8")
                         m3u8Found = requestM3u8FromEndpoint(
                             "https://artwork.m8tec.top/api/v1/artwork/search?artist=$encArtist&album=$encAlbum",
-                            cleanArtist
+                            cleanArtist,
+                            cleanAlbum
                         )
                     }
 
@@ -565,17 +577,19 @@ class BlurVideoWallpaperService : WallpaperService() {
                         val encTitle = URLEncoder.encode(cleanTitle, "UTF-8")
                         m3u8Found = requestM3u8FromEndpoint(
                             "https://artwork.m8tec.top/api/v1/artwork/search?artist=$encArtist&album=$encTitle",
-                            cleanArtist
+                            cleanArtist,
+                            cleanTitle
                         )
                     }
 
                     if (m3u8Found == null) {
-                        val itunesAlbum = findOfficialAlbumOnItunes(cleanArtist, cleanTitle.ifEmpty { cleanAlbum })
+                        val itunesAlbum = findOfficialAlbumOnItunes(cleanArtist, cleanTitle, cleanAlbum)
                         if (itunesAlbum != null && !itunesAlbum.equals(cleanAlbum, ignoreCase = true)) {
                             val encItunesAlbum = URLEncoder.encode(itunesAlbum, "UTF-8")
                             m3u8Found = requestM3u8FromEndpoint(
                                 "https://artwork.m8tec.top/api/v1/artwork/search?artist=$encArtist&album=$encItunesAlbum",
-                                cleanArtist
+                                cleanArtist,
+                                itunesAlbum
                             )
                         }
                     }
@@ -611,10 +625,13 @@ class BlurVideoWallpaperService : WallpaperService() {
             }
         }
 
-        private fun findOfficialAlbumOnItunes(artist: String, trackOrAlbum: String): String? {
+        private fun findOfficialAlbumOnItunes(artist: String, title: String, album: String): String? {
             return try {
-                val term = URLEncoder.encode("$artist $trackOrAlbum", "UTF-8")
-                val url = URL("https://itunes.apple.com/search?term=$term&entity=song&limit=5")
+                val queryTrack = title.ifEmpty { album }
+                if (queryTrack.isEmpty()) return null
+
+                val term = URLEncoder.encode("$artist $queryTrack", "UTF-8")
+                val url = URL("https://itunes.apple.com/search?term=$term&entity=song&limit=8")
                 val conn = (url.openConnection() as HttpURLConnection).apply {
                     connectTimeout = 4000
                     readTimeout = 4000
@@ -624,8 +641,15 @@ class BlurVideoWallpaperService : WallpaperService() {
                 for (i in 0 until results.length()) {
                     val item = results.getJSONObject(i)
                     val foundArtist = item.optString("artistName")
+                    val foundTrack = item.optString("trackName")
                     val collectionName = item.optString("collectionName")
-                    if (collectionName.isNotEmpty() && isArtistMatch(artist, foundArtist)) {
+
+                    // Só aceita o álbum do iTunes se o artista E o nome da música/álbum baterem!
+                    val artistOk = isArtistMatch(artist, foundArtist)
+                    val trackOk = (title.isNotEmpty() && isTextMatch(title, foundTrack)) ||
+                            (album.isNotEmpty() && isTextMatch(album, collectionName))
+
+                    if (collectionName.isNotEmpty() && artistOk && trackOk) {
                         return collectionName
                     }
                 }
@@ -639,7 +663,7 @@ class BlurVideoWallpaperService : WallpaperService() {
             return try {
                 val queryText = if (album.isNotEmpty()) "$artist $album" else "$artist $title"
                 val term = URLEncoder.encode(queryText, "UTF-8")
-                val url = URL("https://itunes.apple.com/search?term=$term&entity=song&limit=5")
+                val url = URL("https://itunes.apple.com/search?term=$term&entity=song&limit=8")
                 val conn = (url.openConnection() as HttpURLConnection).apply {
                     connectTimeout = 4000
                     readTimeout = 4000
@@ -652,12 +676,21 @@ class BlurVideoWallpaperService : WallpaperService() {
                 for (i in 0 until results.length()) {
                     val item = results.getJSONObject(i)
                     val foundArtist = item.optString("artistName")
-                    if (isArtistMatch(artist, foundArtist)) {
+                    val foundTrack = item.optString("trackName")
+                    val foundAlbum = item.optString("collectionName")
+
+                    val artistOk = isArtistMatch(artist, foundArtist)
+                    val contentOk = (album.isNotEmpty() && isTextMatch(album, foundAlbum)) ||
+                            (title.isNotEmpty() && isTextMatch(title, foundTrack)) ||
+                            (title.isNotEmpty() && isTextMatch(title, foundAlbum))
+
+                    if (artistOk && contentOk) {
                         artworkUrl100 = item.optString("artworkUrl100")
                         if (artworkUrl100.isNotEmpty()) break
                     }
                 }
 
+                // Se a música for não-lançada/exclusiva e não existir no iTunes, retorna null para usar a capa original do player!
                 if (artworkUrl100.isEmpty()) return null
 
                 val highResUrl = artworkUrl100.replace("100x100bb", "1000x1000bb")
@@ -674,7 +707,7 @@ class BlurVideoWallpaperService : WallpaperService() {
             }
         }
 
-        private fun requestM3u8FromEndpoint(urlString: String, expectedArtist: String): String? {
+        private fun requestM3u8FromEndpoint(urlString: String, expectedArtist: String, expectedAlbumOrTitle: String): String? {
             return try {
                 val conn = (URL(urlString).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 5000
@@ -687,10 +720,19 @@ class BlurVideoWallpaperService : WallpaperService() {
 
                 val body = conn.inputStream.bufferedReader().readText()
 
+                // 1. Valida se o artista retornado no JSON é realmente o esperado
                 val artistRegex = Regex(""""(?:artist|artistName|artist_name)"\s*:\s*"([^"]+)"""")
                 val returnedArtist = artistRegex.find(body)?.groupValues?.get(1)?.trim()
                 if (!returnedArtist.isNullOrEmpty() && !isArtistMatch(expectedArtist, returnedArtist)) {
-                    Log.d("BlurWallpaper", "Capa descartada! Esperado: $expectedArtist | Veio da API: $returnedArtist")
+                    Log.d("BlurWallpaper", "Vídeo descartado (Artista diferente)! Esperado: $expectedArtist | Veio: $returnedArtist")
+                    return null
+                }
+
+                // 2. Valida se o álbum retornado no JSON corresponde ao álbum/música buscado (evita cair em ASTROWORLD por engano!)
+                val albumRegex = Regex(""""(?:album|albumName|album_name|collectionName|title)"\s*:\s*"([^"]+)"""")
+                val returnedAlbum = albumRegex.find(body)?.groupValues?.get(1)?.trim()
+                if (!returnedAlbum.isNullOrEmpty() && expectedAlbumOrTitle.isNotEmpty() && !isTextMatch(expectedAlbumOrTitle, returnedAlbum)) {
+                    Log.d("BlurWallpaper", "Vídeo descartado (Álbum diferente)! Esperado: $expectedAlbumOrTitle | Veio: $returnedAlbum")
                     return null
                 }
 
@@ -1071,7 +1113,7 @@ class BlurVideoWallpaperService : WallpaperService() {
             }
         """
 
-        // Composição Final com Foto Padrão 1:1 Pixel-Perfect e Caixa 3:4 Padronizada para Músicas!
+        // Composição Final com Nitidez Nativa para Galeria (uMode == 0) e Caixa 3:4 Padronizada para Músicas!
         private const val COMPOSITE_FRAGMENT_SHADER = """
             #extension GL_OES_EGL_image_external : require
             precision highp float;
