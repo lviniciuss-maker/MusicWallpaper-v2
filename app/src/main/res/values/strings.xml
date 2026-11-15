@@ -12,6 +12,9 @@
     <string name="search_apps_hint">Search app name...</string>
     <string name="btn_done">Done</string>
 
+    <string name="chk_local_only_title">Use notification artwork only (Offline Mode)</string>
+    <string name="chk_local_only_desc">Skips online animated/iTunes search and uses the exact cover embedded in your media player notification.</string>
+
     <string name="card_photo_title">2. Standby Wallpaper</string>
     <string name="card_photo_desc">Displayed automatically 5 seconds after music is paused.</string>
     <string name="btn_pick_photo">Choose Photo from Gallery</string>

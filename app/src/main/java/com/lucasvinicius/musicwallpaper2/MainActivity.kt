@@ -5,6 +5,7 @@ import android.app.AlertDialog
 import android.app.WallpaperManager
 import android.content.ComponentName
 import android.content.Context
+import android.content.DialogInterface
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
@@ -59,7 +60,6 @@ class MainActivity : AppCompatActivity() {
     private var previewImageView: ImageView? = null
     private val pickImageRequest = 1001
 
-    // Dados oficiais do seu repositório no GitHub
     private val githubOwner = "lviniciuss-maker"
     private val githubRepo = "MusicWallpaper-v2"
 
@@ -80,6 +80,7 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("wallpaper_prefs", MODE_PRIVATE)
         val savedOffsetPercent = prefs.getInt("top_offset_percent", 20).coerceIn(0, 40)
         val savedBlurPercent = prefs.getInt("blur_strength_percent", 100).coerceIn(60, 100)
+        val savedOfflineOnly = prefs.getBoolean("offline_only_mode", false)
         val currentAppVersion = getInstalledVersionName()
 
         val scrollView = ScrollView(this).apply {
@@ -110,7 +111,7 @@ class MainActivity : AppCompatActivity() {
         rootLayout.addView(subtitleText)
 
         // =========================================================================
-        // CARTÃO 1: PERMISSÃO + LISTA DE EXCEÇÃO DE APPS
+        // CARTÃO 1: PERMISSÃO + LISTA DE EXCEÇÃO + MODO APENAS CAPA DA NOTIFICAÇÃO
         // =========================================================================
         val cardPerm = createCardLayout()
 
@@ -140,12 +141,66 @@ class MainActivity : AppCompatActivity() {
         }
         updateExcludedButtonCount()
 
+        // Opção de usar apenas a arte local da notificação (Modo Offline)
+        val localOnlyRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#202431"))
+                cornerRadius = dp(12).toFloat()
+            }
+        }
+
+        val localOnlyTextCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = dp(10)
+            }
+        }
+
+        val localOnlyTitleTv = TextView(this).apply {
+            text = getString(R.string.chk_local_only_title)
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        }
+
+        val localOnlyDescTv = TextView(this).apply {
+            text = getString(R.string.chk_local_only_desc)
+            setTextColor(Color.parseColor("#9AA0B4"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setPadding(0, dp(2), 0, 0)
+        }
+
+        localOnlyTextCol.addView(localOnlyTitleTv)
+        localOnlyTextCol.addView(localOnlyDescTv)
+
+        val chkLocalOnly = CheckBox(this).apply {
+            isChecked = savedOfflineOnly
+            buttonTintList = ColorStateList.valueOf(Color.parseColor("#8AB4F8"))
+            isClickable = false
+            isFocusable = false
+        }
+
+        localOnlyRow.addView(localOnlyTextCol)
+        localOnlyRow.addView(chkLocalOnly)
+
+        localOnlyRow.setOnClickListener {
+            val newState = !chkLocalOnly.isChecked
+            chkLocalOnly.isChecked = newState
+            prefs.edit().putBoolean("offline_only_mode", newState).apply()
+            notifySettingsChanged()
+        }
+
         cardPerm.addView(permTitle)
         cardPerm.addView(permDesc)
         cardPerm.addView(permStatusBadge)
         cardPerm.addView(btnPermission)
         cardPerm.addView(createSpacer(10))
         cardPerm.addView(btnExcludedApps)
+        cardPerm.addView(createSpacer(12))
+        cardPerm.addView(localOnlyRow)
         rootLayout.addView(cardPerm)
         rootLayout.addView(createSpacer(16))
 
@@ -336,12 +391,27 @@ class MainActivity : AppCompatActivity() {
         updatePhotoStatusUI()
         updatePermissionStatusUI()
 
-        // Verifica silenciosamente ao abrir o app se saiu versão nova no GitHub
         checkForGitHubUpdates(isManualCheck = false)
     }
 
+    // Estiliza o fundo e os botões de todos os AlertDialogs para ficarem 100% legíveis no modo escuro
+    private fun styleDarkDialog(dialog: AlertDialog) {
+        dialog.window?.setBackgroundDrawable(GradientDrawable().apply {
+            setColor(Color.parseColor("#181B24"))
+            cornerRadius = dp(20).toFloat()
+            setStroke(dp(1), Color.parseColor("#2A3042"))
+        })
+        dialog.getButton(DialogInterface.BUTTON_POSITIVE)?.apply {
+            setTextColor(Color.parseColor("#8AB4F8"))
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        }
+        dialog.getButton(DialogInterface.BUTTON_NEGATIVE)?.apply {
+            setTextColor(Color.parseColor("#9AA0B4"))
+        }
+    }
+
     // =========================================================================
-    // VERIFICADOR DE ATUALIZAÇÕES DIRETO DO GITHUB RELEASES
+    // VERIFICADOR DE ATUALIZAÇÕES DIRETO DO GITHUB RELEASES (COM TEXTO CLARO LEGÍVEL)
     // =========================================================================
     private fun getInstalledVersionName(): String {
         return try {
@@ -370,7 +440,6 @@ class MainActivity : AppCompatActivity() {
                     val releaseUrl = json.optString("html_url", "https://github.com/$githubOwner/$githubRepo/releases")
                     val releaseNotes = json.optString("body", "").trim()
 
-                    // Procura o link direto do arquivo .apk anexado nos Assets da Release
                     var downloadUrl = releaseUrl
                     val assets = json.optJSONArray("assets")
                     if (assets != null) {
@@ -388,22 +457,52 @@ class MainActivity : AppCompatActivity() {
                         val prefs = getSharedPreferences("wallpaper_prefs", MODE_PRIVATE)
                         val lastDismissed = prefs.getString("dismissed_update_tag", "")
 
-                        // Se for checagem automática e o usuário já clicou em "Depois" para esta mesma versão, não incomoda de novo
                         if (!isManualCheck && lastDismissed == latestTag) {
                             return@thread
                         }
 
                         runOnUiThread {
                             if (isFinishing || isDestroyed) return@runOnUiThread
-                            val notesPreview = if (releaseNotes.length > 500) {
-                                releaseNotes.take(500) + "..."
+                            val notesPreview = if (releaseNotes.length > 600) {
+                                releaseNotes.take(600) + "..."
                             } else {
                                 releaseNotes.ifEmpty { "Melhorias de desempenho e estabilidade." }
                             }
 
+                            // Layout customizado com letras brancas e claras para leitura perfeita no fundo escuro
+                            val dialogContainer = LinearLayout(this).apply {
+                                orientation = LinearLayout.VERTICAL
+                                setPadding(dp(22), dp(22), dp(22), dp(8))
+                            }
+
+                            val titleTv = TextView(this).apply {
+                                text = getString(R.string.update_dialog_title, latestTag)
+                                setTextColor(Color.WHITE)
+                                setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+                                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                                setPadding(0, 0, 0, dp(12))
+                            }
+
+                            val msgScroll = ScrollView(this).apply {
+                                layoutParams = LinearLayout.LayoutParams(
+                                    LinearLayout.LayoutParams.MATCH_PARENT,
+                                    LinearLayout.LayoutParams.WRAP_CONTENT
+                                )
+                            }
+
+                            val msgTv = TextView(this).apply {
+                                text = getString(R.string.update_dialog_msg, notesPreview)
+                                setTextColor(Color.parseColor("#E2E6F3"))
+                                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                                setLineSpacing(dp(2).toFloat(), 1.1f)
+                            }
+
+                            msgScroll.addView(msgTv)
+                            dialogContainer.addView(titleTv)
+                            dialogContainer.addView(msgScroll)
+
                             val dialog = AlertDialog.Builder(this)
-                                .setTitle(getString(R.string.update_dialog_title, latestTag))
-                                .setMessage(getString(R.string.update_dialog_msg, notesPreview))
+                                .setView(dialogContainer)
                                 .setNegativeButton(getString(R.string.btn_later)) { d, _ ->
                                     prefs.edit().putString("dismissed_update_tag", latestTag).apply()
                                     d.dismiss()
@@ -418,10 +517,7 @@ class MainActivity : AppCompatActivity() {
                                 .create()
 
                             dialog.show()
-                            dialog.window?.setBackgroundDrawable(GradientDrawable().apply {
-                                setColor(Color.parseColor("#181B24"))
-                                cornerRadius = dp(20).toFloat()
-                            })
+                            styleDarkDialog(dialog)
                         }
                     } else if (isManualCheck) {
                         runOnUiThread {
@@ -486,7 +582,16 @@ class MainActivity : AppCompatActivity() {
                     orientation = LinearLayout.VERTICAL
                     gravity = Gravity.CENTER_HORIZONTAL
                     setBackgroundColor(Color.parseColor("#181B24"))
-                    setPadding(dp(16), dp(16), dp(16), dp(8))
+                    setPadding(dp(16), dp(20), dp(16), dp(8))
+                }
+
+                val dialogTitleTv = TextView(this).apply {
+                    text = getString(R.string.crop_dialog_title)
+                    setTextColor(Color.WHITE)
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+                    typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                    gravity = Gravity.CENTER
+                    setPadding(0, 0, 0, dp(6))
                 }
 
                 val hintTv = TextView(this).apply {
@@ -510,11 +615,11 @@ class MainActivity : AppCompatActivity() {
                     layoutParams = LinearLayout.LayoutParams(cropViewW, cropViewH)
                 }
 
+                container.addView(dialogTitleTv)
                 container.addView(hintTv)
                 container.addView(cropView)
 
                 val dialog = AlertDialog.Builder(this)
-                    .setTitle(getString(R.string.crop_dialog_title))
                     .setView(container)
                     .setNegativeButton(getString(R.string.btn_cancel)) { d, _ ->
                         d.dismiss()
@@ -527,10 +632,7 @@ class MainActivity : AppCompatActivity() {
                     .create()
 
                 dialog.show()
-                dialog.window?.setBackgroundDrawable(GradientDrawable().apply {
-                    setColor(Color.parseColor("#181B24"))
-                    cornerRadius = dp(20).toFloat()
-                })
+                styleDarkDialog(dialog)
             }
         }
     }
@@ -729,7 +831,6 @@ class MainActivity : AppCompatActivity() {
     ) {
         thread {
             try {
-                // Carrega a imagem na resolução máxima nativa sem nenhum reescalonamento!
                 val masterBitmap = loadHighResBitmapCorrectOrientation(uri, maxAllowedDim = 8192) ?: fallbackPreview
 
                 val srcLeft = (normRect.left * masterBitmap.width).toInt().coerceIn(0, masterBitmap.width - 1)
@@ -737,8 +838,6 @@ class MainActivity : AppCompatActivity() {
                 val srcWidth = ((normRect.right - normRect.left) * masterBitmap.width).toInt().coerceIn(1, masterBitmap.width - srcLeft)
                 val srcHeight = ((normRect.bottom - normRect.top) * masterBitmap.height).toInt().coerceIn(1, masterBitmap.height - srcTop)
 
-                // Mantém os pixels originais 100% intocados (SEM chamar createScaledBitmap que borra a foto!)
-                // Apenas limita a 4096px se o recorte passar do limite físico do OpenGL
                 val exactSubBitmap = Bitmap.createBitmap(masterBitmap, srcLeft, srcTop, srcWidth, srcHeight)
                 val maxGlDim = max(exactSubBitmap.width, exactSubBitmap.height)
                 val finalBitmapToSave = if (maxGlDim > 4096) {
@@ -781,7 +880,15 @@ class MainActivity : AppCompatActivity() {
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#181B24"))
-            setPadding(dp(16), dp(16), dp(16), dp(8))
+            setPadding(dp(16), dp(20), dp(16), dp(8))
+        }
+
+        val titleTv = TextView(this).apply {
+            text = getString(R.string.dialog_excluded_title)
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setPadding(dp(4), 0, dp(4), dp(12))
         }
 
         val searchBox = EditText(this).apply {
@@ -803,11 +910,11 @@ class MainActivity : AppCompatActivity() {
             dividerHeight = 0
         }
 
+        container.addView(titleTv)
         container.addView(searchBox)
         container.addView(listView)
 
         val dialog = AlertDialog.Builder(this)
-            .setTitle(getString(R.string.dialog_excluded_title))
             .setView(container)
             .setPositiveButton(getString(R.string.btn_done)) { d, _ ->
                 d.dismiss()
@@ -815,10 +922,7 @@ class MainActivity : AppCompatActivity() {
             .create()
 
         dialog.show()
-        dialog.window?.setBackgroundDrawable(GradientDrawable().apply {
-            setColor(Color.parseColor("#181B24"))
-            cornerRadius = dp(20).toFloat()
-        })
+        styleDarkDialog(dialog)
 
         thread {
             val pm = packageManager

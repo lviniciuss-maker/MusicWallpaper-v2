@@ -12,6 +12,9 @@
     <string name="search_apps_hint">Pesquisar aplicativo...</string>
     <string name="btn_done">Concluir</string>
 
+    <string name="chk_local_only_title">Usar apenas capa da notificação (Modo Offline)</string>
+    <string name="chk_local_only_desc">Ignora a busca online e usa exclusivamente a arte local enviada pela notificação do seu player de música.</string>
+
     <string name="card_photo_title">2. Papel de Parede de Espera</string>
     <string name="card_photo_desc">Exibido automaticamente 5 segundos após pausar a música.</string>
     <string name="btn_pick_photo">Escolher Foto da Galeria</string>

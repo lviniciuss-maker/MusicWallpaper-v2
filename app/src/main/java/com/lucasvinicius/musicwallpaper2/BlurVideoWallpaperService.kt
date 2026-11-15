@@ -85,10 +85,11 @@ class BlurVideoWallpaperService : WallpaperService() {
         private var mediaWidth = 1080
         private var mediaHeight = 1440
 
-        // Preferências dinâmicas do usuário (Posição Vertical, Intensidade do Blur e Lista de Exceção)
+        // Preferências dinâmicas do usuário (Posição Vertical, Intensidade do Blur, Apps Ignorados e Modo Offline)
         private var userTopOffset = 0.20f
         private var userBlurScale = 1.00f
         private var excludedPackages: Set<String> = emptySet()
+        private var offlineOnlyMode: Boolean = false
 
         // 0 = Foto padrão da galeria (PNG 100% Lossless com Nitidez Nativa na GPU)
         // 1 = Capa estática da música (cortada nas laterais para caber na caixa 3:4) com Blur espelhado
@@ -141,7 +142,12 @@ class BlurVideoWallpaperService : WallpaperService() {
                             if (displayMode == 0) showDefaultWallpaper()
                         }
                         "com.lucasvinicius.musicwallpaper2.ACTION_SETTINGS_UPDATED" -> {
+                            val prevOffline = offlineOnlyMode
                             loadUserPreferences()
+                            if (prevOffline != offlineOnlyMode) {
+                                // Força reprocessar a faixa atual se o usuário ativou/desativou o Modo Offline
+                                currentTrackKey = ""
+                            }
                             checkCurrentMusic()
                             drawFrame(updateTex = false)
                         }
@@ -217,6 +223,7 @@ class BlurVideoWallpaperService : WallpaperService() {
             userBlurScale = blurPercent / 100f
 
             excludedPackages = prefs.getStringSet("excluded_packages", emptySet())?.toSet() ?: emptySet()
+            offlineOnlyMode = prefs.getBoolean("offline_only_mode", false)
         }
 
         private fun registerUpdatesReceiver() {
@@ -374,11 +381,22 @@ class BlurVideoWallpaperService : WallpaperService() {
                     currentTrackKey = newKey
                     searchGeneration++
                     val currentGen = searchGeneration
-                    Log.d("BlurWallpaper", "App: ${playingController.packageName} -> Artista: $artist | Álbum: $album | Música: $title")
+                    Log.d("BlurWallpaper", "App: ${playingController.packageName} -> Artista: $artist | Álbum: $album | Música: $title | OfflineOnly: $offlineOnlyMode")
 
                     exoPlayer?.pause()
+                    exoPlayer?.clearMediaItems()
                     hasVideoFrame = false
                     currentPlayingM3u8Url = null
+
+                    // Se o Modo Offline (Apenas Capa da Notificação) estiver ativo, usa exclusivamente a arte local da notificação!
+                    if (offlineOnlyMode) {
+                        if (safeFallbackBitmap != null) {
+                            uploadStaticBitmapToOpenGL(safeFallbackBitmap, isDefaultFullWallpaper = false)
+                        } else {
+                            showDefaultWallpaper()
+                        }
+                        return
+                    }
 
                     val cachedBitmap = staticCoverCache[newKey] ?: safeFallbackBitmap
                     if (cachedBitmap != null) {
@@ -395,7 +413,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                     if (displayMode == 0 && safeFallbackBitmap != null) {
                         uploadStaticBitmapToOpenGL(safeFallbackBitmap, isDefaultFullWallpaper = false)
                     }
-                    if (displayMode == 2 && isEngineVisible && exoPlayer?.isPlaying == false) {
+                    if (!offlineOnlyMode && displayMode == 2 && isEngineVisible && exoPlayer?.isPlaying == false) {
                         exoPlayer?.play()
                     }
                 }
@@ -469,7 +487,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                 if (file.exists()) {
                     val options = BitmapFactory.Options().apply {
                         inPreferredConfig = Bitmap.Config.ARGB_8888
-                        inScaled = false // Carrega os pixels brutos exatos sem alteração de DPI!
+                        inScaled = false
                     }
                     val raw = BitmapFactory.decodeFile(file.absolutePath, options)
                     if (raw != null) {
@@ -528,7 +546,6 @@ class BlurVideoWallpaperService : WallpaperService() {
             }
         }
 
-        // Valida se o artista retornado corresponde ao artista tocando no player
         private fun isArtistMatch(expectedArtist: String, returnedArtist: String): Boolean {
             val exp = expectedArtist.lowercase().replace(Regex("[^a-z0-9가-힣一-龯ぁ-んァ-ン]"), "")
             val ret = returnedArtist.lowercase().replace(Regex("[^a-z0-9가-힣一-龯ぁ-んァ-ン]"), "")
@@ -536,7 +553,6 @@ class BlurVideoWallpaperService : WallpaperService() {
             return ret.contains(exp) || exp.contains(ret)
         }
 
-        // Valida se o título da música ou álbum retornado tem relação real com a faixa tocando (evita cair em outro álbum famoso do mesmo cantor)
         private fun isTextMatch(expected: String, returned: String): Boolean {
             val cleanExp = expected.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "")
                 .lowercase().replace(Regex("[^a-z0-9가-힣一-龯ぁ-んァ-ン]"), "")
@@ -594,13 +610,13 @@ class BlurVideoWallpaperService : WallpaperService() {
                         }
                     }
 
-                    if (generation != searchGeneration) return@thread
+                    if (generation != searchGeneration || offlineOnlyMode) return@thread
 
                     if (m3u8Found != null) {
                         m3u8Cache[trackKey] = m3u8Found
                         val finalUrl = m3u8Found
                         mainHandler.post {
-                            if (generation != searchGeneration) return@post
+                            if (generation != searchGeneration || offlineOnlyMode) return@post
                             startVideoPlayback(finalUrl)
                         }
                     } else {
@@ -610,7 +626,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                             staticCoverCache[trackKey] = safeStatic
                         }
                         mainHandler.post {
-                            if (generation != searchGeneration) return@post
+                            if (generation != searchGeneration || offlineOnlyMode) return@post
                             exoPlayer?.pause()
                             exoPlayer?.clearMediaItems()
                             hasVideoFrame = false
@@ -644,7 +660,6 @@ class BlurVideoWallpaperService : WallpaperService() {
                     val foundTrack = item.optString("trackName")
                     val collectionName = item.optString("collectionName")
 
-                    // Só aceita o álbum do iTunes se o artista E o nome da música/álbum baterem!
                     val artistOk = isArtistMatch(artist, foundArtist)
                     val trackOk = (title.isNotEmpty() && isTextMatch(title, foundTrack)) ||
                             (album.isNotEmpty() && isTextMatch(album, collectionName))
@@ -690,7 +705,6 @@ class BlurVideoWallpaperService : WallpaperService() {
                     }
                 }
 
-                // Se a música for não-lançada/exclusiva e não existir no iTunes, retorna null para usar a capa original do player!
                 if (artworkUrl100.isEmpty()) return null
 
                 val highResUrl = artworkUrl100.replace("100x100bb", "1000x1000bb")
@@ -720,7 +734,6 @@ class BlurVideoWallpaperService : WallpaperService() {
 
                 val body = conn.inputStream.bufferedReader().readText()
 
-                // 1. Valida se o artista retornado no JSON é realmente o esperado
                 val artistRegex = Regex(""""(?:artist|artistName|artist_name)"\s*:\s*"([^"]+)"""")
                 val returnedArtist = artistRegex.find(body)?.groupValues?.get(1)?.trim()
                 if (!returnedArtist.isNullOrEmpty() && !isArtistMatch(expectedArtist, returnedArtist)) {
@@ -728,7 +741,6 @@ class BlurVideoWallpaperService : WallpaperService() {
                     return null
                 }
 
-                // 2. Valida se o álbum retornado no JSON corresponde ao álbum/música buscado (evita cair em ASTROWORLD por engano!)
                 val albumRegex = Regex(""""(?:album|albumName|album_name|collectionName|title)"\s*:\s*"([^"]+)"""")
                 val returnedAlbum = albumRegex.find(body)?.groupValues?.get(1)?.trim()
                 if (!returnedAlbum.isNullOrEmpty() && expectedAlbumOrTitle.isNotEmpty() && !isTextMatch(expectedAlbumOrTitle, returnedAlbum)) {
@@ -909,11 +921,9 @@ class BlurVideoWallpaperService : WallpaperService() {
                 return
             }
 
-            // Motor Ping-Pong 4 Estágios (256x340) com intensidade controlada pelo Slider (userBlurScale)
             if (displayMode == 1 || displayMode == 2) {
                 GLES20.glViewport(0, 0, fboWidth, fboHeight)
 
-                // Estágio 1: Blur Horizontal inicial
                 GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboPass1Id)
                 GLES20.glUseProgram(pass1Program)
                 bindQuadAttributes(pass1Program)
@@ -930,7 +940,6 @@ class BlurVideoWallpaperService : WallpaperService() {
                 GLES20.glUniform1i(GLES20.glGetUniformLocation(pass1Program, "sStaticTexture"), 1)
                 GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
 
-                // Estágio 2: Blur Vertical inicial
                 GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboPass2Id)
                 GLES20.glUseProgram(pass2Program)
                 bindQuadAttributes(pass2Program)
@@ -940,14 +949,12 @@ class BlurVideoWallpaperService : WallpaperService() {
                 GLES20.glUniform1i(GLES20.glGetUniformLocation(pass2Program, "sInputTexture"), 0)
                 GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
 
-                // Estágio 3: 2ª Passada Horizontal
                 GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboPass1Id)
                 GLES20.glUniform2f(GLES20.glGetUniformLocation(pass2Program, "uDir"), 0.016f * userBlurScale, 0.0f)
                 GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
                 GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texPass2Id)
                 GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
 
-                // Estágio 4: 2ª Passada Vertical
                 GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboPass2Id)
                 GLES20.glUniform2f(GLES20.glGetUniformLocation(pass2Program, "uDir"), 0.0f, 0.014f * userBlurScale)
                 GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
@@ -955,7 +962,6 @@ class BlurVideoWallpaperService : WallpaperService() {
                 GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
             }
 
-            // Composição Final na Tela de Bloqueio
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
             GLES20.glViewport(0, 0, surfaceWidth, surfaceHeight)
             GLES20.glClearColor(0.05f, 0.05f, 0.08f, 1.0f)
@@ -1113,7 +1119,6 @@ class BlurVideoWallpaperService : WallpaperService() {
             }
         """
 
-        // Composição Final com Nitidez Nativa para Galeria (uMode == 0) e Caixa 3:4 Padronizada para Músicas!
         private const val COMPOSITE_FRAGMENT_SHADER = """
             #extension GL_OES_EGL_image_external : require
             precision highp float;
@@ -1127,7 +1132,6 @@ class BlurVideoWallpaperService : WallpaperService() {
             uniform int uMode;
             uniform float uTopOffset;
 
-            // false = Mantém a proporção original da arte e corta as laterais (Center-Crop) para encaixar em 3:4!
             const bool STRETCH_1X1_VERTICALLY = false;
 
             vec2 mirrorCoords(vec2 uv) {
@@ -1167,7 +1171,6 @@ class BlurVideoWallpaperService : WallpaperService() {
             void main() {
                 float screenY = 1.0 - vTexCoord.y;
 
-                // Modo 0: Papel de parede da galeria com Nitidez Nativa (High-Precision Sharpening)
                 if (uMode == 0) {
                     float imgAspect = uVideoSize.x / max(uVideoSize.y, 1.0);
                     float screenAspect = uResolution.x / max(uResolution.y, 1.0);
@@ -1181,7 +1184,6 @@ class BlurVideoWallpaperService : WallpaperService() {
                         uv.x = (uv.x - 0.5) * scaleX + 0.5;
                     }
 
-                    // Passo de 1 pixel exato na resolução nativa da tela para reconstruir micro-detalhes (igual ao app Galeria)
                     vec2 texel = vec2(1.0 / max(uResolution.x, 1080.0), 1.0 / max(uResolution.y, 2400.0));
                     vec4 center = texture2D(sStaticTexture, uv);
                     vec4 top    = texture2D(sStaticTexture, uv + vec2(0.0, -texel.y));
@@ -1189,7 +1191,6 @@ class BlurVideoWallpaperService : WallpaperService() {
                     vec4 left   = texture2D(sStaticTexture, uv + vec2(-texel.x, 0.0));
                     vec4 right  = texture2D(sStaticTexture, uv + vec2( texel.x, 0.0));
 
-                    // Filtro de Nitidez (Unsharp Mask 5-tap calibrado para compensar a interpolação da GPU)
                     vec4 neighbors = (top + bottom + left + right) * 0.25;
                     vec4 sharpened = center + (center - neighbors) * 0.45;
                     gl_FragColor = clamp(sharpened, 0.0, 1.0);
@@ -1198,7 +1199,6 @@ class BlurVideoWallpaperService : WallpaperService() {
 
                 float topOffset = uTopOffset;
                 
-                // Caixa 3:4 fixa na tela:
                 float fixedBoxAspect = 3.0 / 4.0;
                 float targetHeightRatio = (uResolution.x / fixedBoxAspect) / max(uResolution.y, 1.0);
                 targetHeightRatio = clamp(targetHeightRatio, 0.45, 0.68);
@@ -1207,7 +1207,6 @@ class BlurVideoWallpaperService : WallpaperService() {
                 if (!STRETCH_1X1_VERTICALLY) {
                     float mediaAspect = uVideoSize.x / max(uVideoSize.y, 1.0);
                     if (fixedBoxAspect < mediaAspect) {
-                        // Corta as laterais proporcionalmente (Center-Crop) para formar 3:4 sem deformar!
                         scaleX = fixedBoxAspect / mediaAspect;
                     }
                 }
