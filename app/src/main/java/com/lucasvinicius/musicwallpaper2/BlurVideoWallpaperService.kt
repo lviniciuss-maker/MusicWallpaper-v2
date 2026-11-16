@@ -145,7 +145,6 @@ class BlurVideoWallpaperService : WallpaperService() {
                             val prevOffline = offlineOnlyMode
                             loadUserPreferences()
                             if (prevOffline != offlineOnlyMode) {
-                                // Força reprocessar a faixa atual se o usuário ativou/desativou o Modo Offline
                                 currentTrackKey = ""
                             }
                             checkCurrentMusic()
@@ -388,7 +387,6 @@ class BlurVideoWallpaperService : WallpaperService() {
                     hasVideoFrame = false
                     currentPlayingM3u8Url = null
 
-                    // Se o Modo Offline (Apenas Capa da Notificação) estiver ativo, usa exclusivamente a arte local da notificação!
                     if (offlineOnlyMode) {
                         if (safeFallbackBitmap != null) {
                             uploadStaticBitmapToOpenGL(safeFallbackBitmap, isDefaultFullWallpaper = false)
@@ -554,9 +552,9 @@ class BlurVideoWallpaperService : WallpaperService() {
         }
 
         private fun isTextMatch(expected: String, returned: String): Boolean {
-            val cleanExp = expected.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "")
+            val cleanExp = expected.replace(Regex("""\s*[(\[].*?[)\]]"""), "")
                 .lowercase().replace(Regex("[^a-z0-9가-힣一-龯ぁ-んァ-ン]"), "")
-            val cleanRet = returned.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "")
+            val cleanRet = returned.replace(Regex("""\s*[(\[].*?[)\]]"""), "")
                 .lowercase().replace(Regex("[^a-z0-9가-힣一-龯ぁ-んァ-ン]"), "")
             if (cleanExp.isEmpty() || cleanRet.isEmpty()) return false
             return cleanRet.contains(cleanExp) || cleanExp.contains(cleanRet)
@@ -573,13 +571,17 @@ class BlurVideoWallpaperService : WallpaperService() {
             thread {
                 try {
                     val cleanArtist = artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: artist
-                    val cleanTitle = title.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "").trim()
-                    val cleanAlbum = album.replace(Regex("""\s*[\(\[].*?[\)\]]"""), "").trim()
+                    val cleanTitle = title.replace(Regex("""\s*[(\[].*?[)\]]"""), "").trim()
+                    val cleanAlbum = album.replace(Regex("""\s*[(\[].*?[)\]]"""), "").trim()
 
                     val encArtist = URLEncoder.encode(cleanArtist, "UTF-8")
 
                     var m3u8Found: String? = null
+                    var itunesMatch: Triple<String, String, String>? = null
 
+                    // =========================================================================
+                    // PLANO A: Busca Vídeo Vertical 3:4 na API Principal (artwork.m8tec.top)
+                    // =========================================================================
                     if (cleanAlbum.isNotEmpty()) {
                         val encAlbum = URLEncoder.encode(cleanAlbum, "UTF-8")
                         m3u8Found = requestM3u8FromEndpoint(
@@ -598,15 +600,34 @@ class BlurVideoWallpaperService : WallpaperService() {
                         )
                     }
 
+                    // Se não achou direto pelo nome que veio do player, consulta o catálogo oficial do iTunes
                     if (m3u8Found == null) {
-                        val itunesAlbum = findOfficialAlbumOnItunes(cleanArtist, cleanTitle, cleanAlbum)
-                        if (itunesAlbum != null && !itunesAlbum.equals(cleanAlbum, ignoreCase = true)) {
-                            val encItunesAlbum = URLEncoder.encode(itunesAlbum, "UTF-8")
+                        itunesMatch = queryItunesCatalog(cleanArtist, cleanAlbum, cleanTitle)
+                        val officialAlbumName = itunesMatch?.first ?: ""
+                        if (officialAlbumName.isNotEmpty() && !officialAlbumName.equals(cleanAlbum, ignoreCase = true)) {
+                            val encItunesAlbum = URLEncoder.encode(officialAlbumName, "UTF-8")
                             m3u8Found = requestM3u8FromEndpoint(
                                 "https://artwork.m8tec.top/api/v1/artwork/search?artist=$encArtist&album=$encItunesAlbum",
                                 cleanArtist,
-                                itunesAlbum
+                                officialAlbumName
                             )
+                        }
+                    }
+
+                    // =========================================================================
+                    // PLANO B AUTOMÁTICO: Extração Direta da Página da Apple Music (On-Device)
+                    // Se o servidor de terceiros estiver offline ou não tiver o álbum, extrai direto da Apple!
+                    // =========================================================================
+                    if (m3u8Found == null) {
+                        if (itunesMatch == null) {
+                            itunesMatch = queryItunesCatalog(cleanArtist, cleanAlbum, cleanTitle)
+                        }
+                        val collectionViewUrl = itunesMatch?.second ?: ""
+                        if (collectionViewUrl.isNotEmpty()) {
+                            m3u8Found = extractM3u8FromAppleMusicPage(collectionViewUrl)
+                            if (m3u8Found != null) {
+                                Log.d("BlurWallpaper", "Plano B ativado! Vídeo .m3u8 extraído direto da Apple: $m3u8Found")
+                            }
                         }
                     }
 
@@ -620,7 +641,18 @@ class BlurVideoWallpaperService : WallpaperService() {
                             startVideoPlayback(finalUrl)
                         }
                     } else {
-                        val downloadedStatic = fetchHighResStaticCover(cleanArtist, cleanAlbum, cleanTitle)
+                        // =====================================================================
+                        // PLANO C: Capa Estática 1000x1000 do iTunes ou Fallback da Notificação
+                        // =====================================================================
+                        if (itunesMatch == null) {
+                            itunesMatch = queryItunesCatalog(cleanArtist, cleanAlbum, cleanTitle)
+                        }
+                        val highResArtUrl = itunesMatch?.third ?: ""
+                        val downloadedStatic = if (highResArtUrl.isNotEmpty()) {
+                            downloadBitmapFromUrl(highResArtUrl)
+                        } else {
+                            null
+                        }
                         val safeStatic = makeGlSafeBitmap(downloadedStatic) ?: fallbackBitmap
                         if (safeStatic != null) {
                             staticCoverCache[trackKey] = safeStatic
@@ -636,58 +668,44 @@ class BlurVideoWallpaperService : WallpaperService() {
                         }
                     }
                 } catch (e: Throwable) {
-                    Log.e("BlurWallpaper", "Erro ao buscar capa na API", e)
+                    Log.e("BlurWallpaper", "Erro ao buscar capa", e)
                 }
             }
         }
 
-        private fun findOfficialAlbumOnItunes(artist: String, title: String, album: String): String? {
-            return try {
-                val queryTrack = title.ifEmpty { album }
-                if (queryTrack.isEmpty()) return null
+        // Retorna Triple(collectionName, collectionViewUrl, highResArtworkUrl) validando Artista e Música/Álbum
+        private fun queryItunesCatalog(artist: String, album: String, title: String): Triple<String, String, String>? {
+            val primarySearch = fetchFromItunesEndpoint(
+                if (album.isNotEmpty()) "$artist $album" else "$artist $title",
+                artist,
+                album,
+                title
+            )
+            if (primarySearch != null) return primarySearch
 
-                val term = URLEncoder.encode("$artist $queryTrack", "UTF-8")
-                val url = URL("https://itunes.apple.com/search?term=$term&entity=song&limit=8")
-                val conn = (url.openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 4000
-                    readTimeout = 4000
-                }
-                val json = JSONObject(conn.inputStream.bufferedReader().readText())
-                val results = json.optJSONArray("results") ?: return null
-                for (i in 0 until results.length()) {
-                    val item = results.getJSONObject(i)
-                    val foundArtist = item.optString("artistName")
-                    val foundTrack = item.optString("trackName")
-                    val collectionName = item.optString("collectionName")
-
-                    val artistOk = isArtistMatch(artist, foundArtist)
-                    val trackOk = (title.isNotEmpty() && isTextMatch(title, foundTrack)) ||
-                            (album.isNotEmpty() && isTextMatch(album, collectionName))
-
-                    if (collectionName.isNotEmpty() && artistOk && trackOk) {
-                        return collectionName
-                    }
-                }
-                null
-            } catch (_: Throwable) {
-                null
+            if (album.isNotEmpty() && title.isNotEmpty() && !album.equals(title, ignoreCase = true)) {
+                return fetchFromItunesEndpoint("$artist $title", artist, album, title)
             }
+            return null
         }
 
-        private fun fetchHighResStaticCover(artist: String, album: String, title: String): Bitmap? {
+        private fun fetchFromItunesEndpoint(
+            queryText: String,
+            artist: String,
+            album: String,
+            title: String
+        ): Triple<String, String, String>? {
             return try {
-                val queryText = if (album.isNotEmpty()) "$artist $album" else "$artist $title"
+                if (queryText.isBlank()) return null
                 val term = URLEncoder.encode(queryText, "UTF-8")
-                val url = URL("https://itunes.apple.com/search?term=$term&entity=song&limit=8")
+                val url = URL("https://itunes.apple.com/search?term=$term&entity=song&limit=10")
                 val conn = (url.openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 4000
-                    readTimeout = 4000
+                    connectTimeout = 4500
+                    readTimeout = 4500
                 }
                 val json = JSONObject(conn.inputStream.bufferedReader().readText())
                 val results = json.optJSONArray("results") ?: return null
-                if (results.length() == 0) return null
 
-                var artworkUrl100 = ""
                 for (i in 0 until results.length()) {
                     val item = results.getJSONObject(i)
                     val foundArtist = item.optString("artistName")
@@ -700,22 +718,17 @@ class BlurVideoWallpaperService : WallpaperService() {
                             (title.isNotEmpty() && isTextMatch(title, foundAlbum))
 
                     if (artistOk && contentOk) {
-                        artworkUrl100 = item.optString("artworkUrl100")
-                        if (artworkUrl100.isNotEmpty()) break
+                        val rawCollectionUrl = item.optString("collectionViewUrl", "")
+                        val cleanCollectionUrl = rawCollectionUrl.substringBefore("?")
+                        val art100 = item.optString("artworkUrl100", "")
+                        val highResArt = if (art100.isNotEmpty()) art100.replace("100x100bb", "1000x1000bb") else ""
+
+                        if (foundAlbum.isNotEmpty() || cleanCollectionUrl.isNotEmpty() || highResArt.isNotEmpty()) {
+                            return Triple(foundAlbum, cleanCollectionUrl, highResArt)
+                        }
                     }
                 }
-
-                if (artworkUrl100.isEmpty()) return null
-
-                val highResUrl = artworkUrl100.replace("100x100bb", "1000x1000bb")
-                val imgConn = (URL(highResUrl).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 5000
-                    readTimeout = 5000
-                }
-                val opts = BitmapFactory.Options().apply {
-                    inPreferredConfig = Bitmap.Config.ARGB_8888
-                }
-                BitmapFactory.decodeStream(imgConn.inputStream, null, opts)
+                null
             } catch (_: Throwable) {
                 null
             }
@@ -765,6 +778,64 @@ class BlurVideoWallpaperService : WallpaperService() {
                             it.contains("tall", ignoreCase = true) ||
                             it.contains("3x4", ignoreCase = true)
                 } ?: matches.lastOrNull()
+            } catch (_: Throwable) {
+                null
+            }
+        }
+
+        private fun extractM3u8FromAppleMusicPage(collectionViewUrl: String): String? {
+            return try {
+                val appleMusicUrl = collectionViewUrl
+                    .replace("itunes.apple.com", "music.apple.com")
+                    .trim()
+
+                val conn = (URL(appleMusicUrl).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 5500
+                    readTimeout = 5500
+                    setRequestProperty(
+                        "User-Agent",
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+                    )
+                    setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                    setRequestProperty("Accept-Language", "en-US,en;q=0.9")
+                }
+
+                if (conn.responseCode !in 200..299) return null
+
+                val html = conn.inputStream.bufferedReader().readText()
+                val normalizedHtml = html
+                    .replace("\\/", "/")
+                    .replace("\\u002F", "/")
+                    .replace("&amp;", "&")
+
+                val regex = Regex("""https://[^\s"'<>\\]+\.m3u8""")
+                val matches = regex.findAll(normalizedHtml).map { it.value }.distinct().toList()
+                if (matches.isEmpty()) return null
+
+                matches.firstOrNull {
+                    it.contains("1080x1440") ||
+                            it.contains("2160x2880") ||
+                            it.contains("1440x1920") ||
+                            it.contains("768x1024") ||
+                            it.contains("tall", ignoreCase = true) ||
+                            it.contains("3x4", ignoreCase = true)
+                } ?: matches.firstOrNull()
+            } catch (e: Throwable) {
+                Log.e("BlurWallpaper", "Erro no fallback da página da Apple", e)
+                null
+            }
+        }
+
+        private fun downloadBitmapFromUrl(imageUrl: String): Bitmap? {
+            return try {
+                val imgConn = (URL(imageUrl).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 5000
+                    readTimeout = 5000
+                }
+                val opts = BitmapFactory.Options().apply {
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                }
+                BitmapFactory.decodeStream(imgConn.inputStream, null, opts)
             } catch (_: Throwable) {
                 null
             }
