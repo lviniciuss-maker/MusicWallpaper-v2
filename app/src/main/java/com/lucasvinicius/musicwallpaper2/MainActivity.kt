@@ -55,10 +55,19 @@ import kotlin.math.max
 class MainActivity : AppCompatActivity() {
 
     private var permStatusBadge: TextView? = null
+    private var btnRestrictedHelp: Button? = null
+    private var restrictedHelpSpacer: View? = null
     private var btnExcludedApps: Button? = null
+
     private var statusText: TextView? = null
     private var previewImageView: ImageView? = null
-    private val pickImageRequest = 1001
+
+    private var homePhotoContainer: LinearLayout? = null
+    private var homeStatusText: TextView? = null
+    private var homePreviewImageView: ImageView? = null
+
+    private val pickLockscreenImageRequest = 1001
+    private val pickHomeImageRequest = 1002
 
     private val githubOwner = "lviniciuss-maker"
     private val githubRepo = "MusicWallpaper-v2"
@@ -81,6 +90,7 @@ class MainActivity : AppCompatActivity() {
         val savedOffsetPercent = prefs.getInt("top_offset_percent", 20).coerceIn(0, 40)
         val savedBlurPercent = prefs.getInt("blur_strength_percent", 100).coerceIn(60, 100)
         val savedOfflineOnly = prefs.getBoolean("offline_only_mode", false)
+        val savedLockscreenOnly = prefs.getBoolean("lockscreen_only_mode", false)
         val currentAppVersion = getInstalledVersionName()
 
         val scrollView = ScrollView(this).apply {
@@ -111,7 +121,7 @@ class MainActivity : AppCompatActivity() {
         rootLayout.addView(subtitleText)
 
         // =========================================================================
-        // CARTÃO 1: PERMISSÃO + LISTA DE EXCEÇÃO + MODO APENAS CAPA DA NOTIFICAÇÃO
+        // CARTÃO 1: PERMISSÃO + AJUDA CONFIGURAÇÃO RESTRITA + EXCEÇÕES + MODO OFFLINE
         // =========================================================================
         val cardPerm = createCardLayout()
 
@@ -134,6 +144,23 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        restrictedHelpSpacer = createSpacer(8)
+        btnRestrictedHelp = Button(this).apply {
+            text = getString(R.string.btn_restricted_help)
+            isAllCaps = false
+            setTextColor(Color.parseColor("#FDD663"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#2A261D"))
+                cornerRadius = dp(12).toFloat()
+                setStroke(dp(1), Color.parseColor("#4D4329"))
+            }
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            setOnClickListener {
+                showRestrictedSettingsHelpDialog()
+            }
+        }
+
         btnExcludedApps = createSecondaryButton("").apply {
             setOnClickListener {
                 showExcludedAppsDialog()
@@ -141,7 +168,6 @@ class MainActivity : AppCompatActivity() {
         }
         updateExcludedButtonCount()
 
-        // Opção de usar apenas a arte local da notificação (Modo Offline)
         val localOnlyRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -197,6 +223,8 @@ class MainActivity : AppCompatActivity() {
         cardPerm.addView(permDesc)
         cardPerm.addView(permStatusBadge)
         cardPerm.addView(btnPermission)
+        cardPerm.addView(restrictedHelpSpacer)
+        cardPerm.addView(btnRestrictedHelp)
         cardPerm.addView(createSpacer(10))
         cardPerm.addView(btnExcludedApps)
         cardPerm.addView(createSpacer(12))
@@ -205,7 +233,7 @@ class MainActivity : AppCompatActivity() {
         rootLayout.addView(createSpacer(16))
 
         // =========================================================================
-        // CARTÃO 2: FOTO PADRÃO DA GALERIA (COM EDITOR DE CORTE E QUALIDADE PNG 1:1)
+        // CARTÃO 2: FOTOS DE ESPERA (TELA DE BLOQUEIO E TELA INICIAL SEPARADAS)
         // =========================================================================
         val cardPhoto = createCardLayout()
 
@@ -246,17 +274,138 @@ class MainActivity : AppCompatActivity() {
                         type = "image/*"
                     }
                     @Suppress("DEPRECATION")
-                    startActivityForResult(Intent.createChooser(intent, getString(R.string.chooser_title)), pickImageRequest)
+                    startActivityForResult(Intent.createChooser(intent, getString(R.string.chooser_title)), pickLockscreenImageRequest)
                 } catch (_: Exception) {
                     Toast.makeText(this@MainActivity, getString(R.string.toast_error_generic), Toast.LENGTH_SHORT).show()
                 }
             }
         }
 
+        // Chave para exibir música apenas na Tela de Bloqueio
+        val lockscreenOnlyRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#202431"))
+                cornerRadius = dp(12).toFloat()
+            }
+        }
+
+        val lockscreenOnlyTextCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = dp(10)
+            }
+        }
+
+        val lockscreenOnlyTitleTv = TextView(this).apply {
+            text = getString(R.string.chk_lockscreen_only_title)
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        }
+
+        val lockscreenOnlyDescTv = TextView(this).apply {
+            text = getString(R.string.chk_lockscreen_only_desc)
+            setTextColor(Color.parseColor("#9AA0B4"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setPadding(0, dp(2), 0, 0)
+        }
+
+        lockscreenOnlyTextCol.addView(lockscreenOnlyTitleTv)
+        lockscreenOnlyTextCol.addView(lockscreenOnlyDescTv)
+
+        val chkLockscreenOnly = CheckBox(this).apply {
+            isChecked = savedLockscreenOnly
+            buttonTintList = ColorStateList.valueOf(Color.parseColor("#8AB4F8"))
+            isClickable = false
+            isFocusable = false
+        }
+
+        lockscreenOnlyRow.addView(lockscreenOnlyTextCol)
+        lockscreenOnlyRow.addView(chkLockscreenOnly)
+
+        // Seção condicional para escolher a foto exclusiva da Tela Inicial (só aparece quando a chave está ativa)
+        homePhotoContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#141720"))
+                cornerRadius = dp(14).toFloat()
+                setStroke(dp(1), Color.parseColor("#262B3C"))
+            }
+            visibility = if (savedLockscreenOnly) View.VISIBLE else View.GONE
+        }
+
+        val homeSectionTitle = TextView(this).apply {
+            text = getString(R.string.home_photo_section_title)
+            setTextColor(Color.parseColor("#8AB4F8"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        }
+
+        val homePhotoRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(10), 0, dp(12))
+        }
+
+        homePreviewImageView = ImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(54), dp(84)).apply {
+                marginEnd = dp(16)
+            }
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#252936"))
+                cornerRadius = dp(10).toFloat()
+            }
+            clipToOutline = true
+        }
+
+        homeStatusText = TextView(this).apply {
+            setTextColor(Color.parseColor("#D5D9E6"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+
+        homePhotoRow.addView(homePreviewImageView)
+        homePhotoRow.addView(homeStatusText)
+
+        val btnPickHomeImage = createSecondaryButton(getString(R.string.btn_pick_home_photo)).apply {
+            setOnClickListener {
+                try {
+                    val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                        type = "image/*"
+                    }
+                    @Suppress("DEPRECATION")
+                    startActivityForResult(Intent.createChooser(intent, getString(R.string.chooser_title)), pickHomeImageRequest)
+                } catch (_: Exception) {
+                    Toast.makeText(this@MainActivity, getString(R.string.toast_error_generic), Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        homePhotoContainer?.addView(homeSectionTitle)
+        homePhotoContainer?.addView(homePhotoRow)
+        homePhotoContainer?.addView(btnPickHomeImage)
+
+        lockscreenOnlyRow.setOnClickListener {
+            val newState = !chkLockscreenOnly.isChecked
+            chkLockscreenOnly.isChecked = newState
+            prefs.edit().putBoolean("lockscreen_only_mode", newState).apply()
+            homePhotoContainer?.visibility = if (newState) View.VISIBLE else View.GONE
+            notifySettingsChanged()
+        }
+
         cardPhoto.addView(photoTitle)
         cardPhoto.addView(photoDesc)
         cardPhoto.addView(photoRow)
         cardPhoto.addView(btnPickImage)
+        cardPhoto.addView(createSpacer(12))
+        cardPhoto.addView(lockscreenOnlyRow)
+        cardPhoto.addView(createSpacer(10))
+        cardPhoto.addView(homePhotoContainer)
         rootLayout.addView(cardPhoto)
         rootLayout.addView(createSpacer(16))
 
@@ -394,7 +543,49 @@ class MainActivity : AppCompatActivity() {
         checkForGitHubUpdates(isManualCheck = false)
     }
 
-    // Estiliza o fundo e os botões de todos os AlertDialogs para ficarem 100% legíveis no modo escuro
+    private fun showRestrictedSettingsHelpDialog() {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(22), dp(22), dp(8))
+        }
+
+        val titleTv = TextView(this).apply {
+            text = getString(R.string.restricted_help_title)
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setPadding(0, 0, 0, dp(12))
+        }
+
+        val msgTv = TextView(this).apply {
+            text = getString(R.string.restricted_help_msg)
+            setTextColor(Color.parseColor("#E2E6F3"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setLineSpacing(dp(2).toFloat(), 1.15f)
+        }
+
+        container.addView(titleTv)
+        container.addView(msgTv)
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(container)
+            .setNegativeButton(getString(R.string.btn_done), null)
+            .setPositiveButton(getString(R.string.btn_open_app_info)) { _, _ ->
+                try {
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.fromParts("package", packageName, null)
+                    }
+                    startActivity(intent)
+                } catch (_: Exception) {
+                    Toast.makeText(this, getString(R.string.toast_error_generic), Toast.LENGTH_SHORT).show()
+                }
+            }
+            .create()
+
+        dialog.show()
+        styleDarkDialog(dialog)
+    }
+
     private fun styleDarkDialog(dialog: AlertDialog) {
         dialog.window?.setBackgroundDrawable(GradientDrawable().apply {
             setColor(Color.parseColor("#181B24"))
@@ -411,7 +602,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     // =========================================================================
-    // VERIFICADOR DE ATUALIZAÇÕES DIRETO DO GITHUB RELEASES (COM TEXTO CLARO LEGÍVEL)
+    // VERIFICADOR DE ATUALIZAÇÕES DIRETO DO GITHUB RELEASES
     // =========================================================================
     private fun getInstalledVersionName(): String {
         return try {
@@ -469,7 +660,6 @@ class MainActivity : AppCompatActivity() {
                                 releaseNotes.ifEmpty { "Melhorias de desempenho e estabilidade." }
                             }
 
-                            // Layout customizado com letras brancas e claras para leitura perfeita no fundo escuro
                             val dialogContainer = LinearLayout(this).apply {
                                 orientation = LinearLayout.VERTICAL
                                 setPadding(dp(22), dp(22), dp(22), dp(8))
@@ -560,7 +750,7 @@ class MainActivity : AppCompatActivity() {
     // =========================================================================
     // EDITOR DE RECORTE E ZOOM COM EXTRAÇÃO DIRETA DA IMAGEM ORIGINAL (LOSSLESS)
     // =========================================================================
-    private fun showCropDialogForUri(uri: Uri) {
+    private fun showCropDialogForUri(uri: Uri, isHomeWallpaper: Boolean) {
         thread {
             val previewBitmap = loadHighResBitmapCorrectOrientation(uri, maxAllowedDim = 4096)
             if (previewBitmap == null) {
@@ -626,7 +816,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     .setPositiveButton(getString(R.string.btn_save_crop)) { d, _ ->
                         val normRect = cropView.getNormalizedCropRect()
-                        saveLosslessCroppedWallpaper(uri, previewBitmap, normRect, screenW, screenH)
+                        saveLosslessCroppedWallpaper(uri, previewBitmap, normRect, isHomeWallpaper)
                         d.dismiss()
                     }
                     .create()
@@ -826,8 +1016,7 @@ class MainActivity : AppCompatActivity() {
         uri: Uri,
         fallbackPreview: Bitmap,
         normRect: RectF,
-        screenW: Int,
-        screenH: Int
+        isHomeWallpaper: Boolean
     ) {
         thread {
             try {
@@ -852,10 +1041,17 @@ class MainActivity : AppCompatActivity() {
                     exactSubBitmap
                 }
 
-                File(filesDir, "default_wallpaper.jpg").delete()
-                val pngFile = File(filesDir, "default_wallpaper.png")
-                FileOutputStream(pngFile).use { out ->
-                    finalBitmapToSave.compress(Bitmap.CompressFormat.PNG, 100, out)
+                if (isHomeWallpaper) {
+                    val homePngFile = File(filesDir, "home_wallpaper.png")
+                    FileOutputStream(homePngFile).use { out ->
+                        finalBitmapToSave.compress(Bitmap.CompressFormat.PNG, 100, out)
+                    }
+                } else {
+                    File(filesDir, "default_wallpaper.jpg").delete()
+                    val lockPngFile = File(filesDir, "default_wallpaper.png")
+                    FileOutputStream(lockPngFile).use { out ->
+                        finalBitmapToSave.compress(Bitmap.CompressFormat.PNG, 100, out)
+                    }
                 }
 
                 runOnUiThread {
@@ -1068,6 +1264,9 @@ class MainActivity : AppCompatActivity() {
                 setTextColor(Color.parseColor("#F28B82"))
             }
         }
+        val helpVisibility = if (granted) View.GONE else View.VISIBLE
+        btnRestrictedHelp?.visibility = helpVisibility
+        restrictedHelpSpacer?.visibility = helpVisibility
     }
 
     private fun createCardLayout(): LinearLayout {
@@ -1128,10 +1327,11 @@ class MainActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == pickImageRequest && resultCode == Activity.RESULT_OK) {
-            val uri = data?.data
-            if (uri != null) {
-                showCropDialogForUri(uri)
+        if (resultCode == Activity.RESULT_OK) {
+            val uri = data?.data ?: return
+            when (requestCode) {
+                pickLockscreenImageRequest -> showCropDialogForUri(uri, isHomeWallpaper = false)
+                pickHomeImageRequest -> showCropDialogForUri(uri, isHomeWallpaper = true)
             }
         }
     }
@@ -1139,20 +1339,37 @@ class MainActivity : AppCompatActivity() {
     private fun updatePhotoStatusUI() {
         val pngFile = File(filesDir, "default_wallpaper.png")
         val jpgFile = File(filesDir, "default_wallpaper.jpg")
-        val activeFile = when {
+        val activeLockFile = when {
             pngFile.exists() -> pngFile
             jpgFile.exists() -> jpgFile
             else -> null
         }
 
-        if (activeFile != null) {
+        if (activeLockFile != null) {
             statusText?.text = getString(R.string.status_photo_ok)
             val thumbOpts = BitmapFactory.Options().apply { inSampleSize = 4 }
-            val thumb = BitmapFactory.decodeFile(activeFile.absolutePath, thumbOpts)
+            val thumb = BitmapFactory.decodeFile(activeLockFile.absolutePath, thumbOpts)
             previewImageView?.setImageBitmap(thumb)
         } else {
             statusText?.text = getString(R.string.status_photo_none)
             previewImageView?.setImageDrawable(null)
+        }
+
+        val homePngFile = File(filesDir, "home_wallpaper.png")
+        if (homePngFile.exists()) {
+            homeStatusText?.text = getString(R.string.status_home_photo_ok)
+            val thumbOpts = BitmapFactory.Options().apply { inSampleSize = 4 }
+            val thumb = BitmapFactory.decodeFile(homePngFile.absolutePath, thumbOpts)
+            homePreviewImageView?.setImageBitmap(thumb)
+        } else {
+            homeStatusText?.text = getString(R.string.status_home_photo_none)
+            if (activeLockFile != null) {
+                val thumbOpts = BitmapFactory.Options().apply { inSampleSize = 4 }
+                val thumb = BitmapFactory.decodeFile(activeLockFile.absolutePath, thumbOpts)
+                homePreviewImageView?.setImageBitmap(thumb)
+            } else {
+                homePreviewImageView?.setImageDrawable(null)
+            }
         }
     }
 }

@@ -7,6 +7,10 @@
     <string name="perm_status_ok">● Permission Granted</string>
     <string name="perm_status_missing">● Permission Required</string>
     <string name="btn_grant_perm">Configure Permission</string>
+    <string name="btn_restricted_help">⚠️ Blocked on Android 13+? How to unlock</string>
+    <string name="restricted_help_title">Unlock Restricted Setting (Android 13+)</string>
+    <string name="restricted_help_msg">When installing an APK outside the Play Store, Android blocks Notification Access by default:\n\n1. Tap \"Configure Permission\" first and tap on MusicWallpaper (a Restricted Setting warning will appear—tap OK).\n\n2. Tap \"Open App Info\" below, tap the 3 dots (⋮) in the top-right corner, and select \"Allow restricted settings\".\n\n3. Return here and enable \"Configure Permission\" normally!</string>
+    <string name="btn_open_app_info">Open App Info</string>
     <string name="btn_excluded_apps">Ignored Apps (%1$d)</string>
     <string name="dialog_excluded_title">Select Apps to Ignore</string>
     <string name="search_apps_hint">Search app name...</string>
@@ -15,13 +19,20 @@
     <string name="chk_local_only_title">Use notification artwork only (Offline Mode)</string>
     <string name="chk_local_only_desc">Skips online animated/iTunes search and uses the exact cover embedded in your media player notification.</string>
 
-    <string name="card_photo_title">2. Standby Wallpaper</string>
-    <string name="card_photo_desc">Displayed automatically 5 seconds after music is paused.</string>
-    <string name="btn_pick_photo">Choose Photo from Gallery</string>
-    <string name="status_photo_ok">✅ Custom standby photo active</string>
-    <string name="status_photo_none">ℹ️ No custom photo selected yet</string>
+    <string name="card_photo_title">2. Standby &amp; Home Wallpapers</string>
+    <string name="card_photo_desc">Lockscreen standby photo is displayed automatically 5 seconds after music is paused.</string>
+    <string name="btn_pick_photo">Choose Lockscreen Standby Photo</string>
+    <string name="status_photo_ok">✅ Custom lockscreen photo active</string>
+    <string name="status_photo_none">ℹ️ No custom lockscreen photo selected yet</string>
     <string name="chooser_title">Select a wallpaper photo</string>
-    <string name="toast_photo_saved">Standby photo saved successfully!</string>
+    <string name="toast_photo_saved">Wallpaper photo saved successfully!</string>
+
+    <string name="chk_lockscreen_only_title">Show music artwork on Lockscreen only</string>
+    <string name="chk_lockscreen_only_desc">Select \"Home and lock screens\" when applying. Music artwork will only appear on the Lockscreen, while your Home screen stays static.</string>
+    <string name="home_photo_section_title">Home Screen Static Wallpaper</string>
+    <string name="btn_pick_home_photo">Choose Home Screen Photo</string>
+    <string name="status_home_photo_ok">✅ Custom home screen photo active</string>
+    <string name="status_home_photo_none">ℹ️ Using lockscreen standby photo as fallback</string>
 
     <string name="card_pos_title">3. Artwork &amp; Blur Adjustments</string>
     <string name="pos_label_format">Vertical Position (from top): %1$d%%</string>
@@ -31,7 +42,7 @@
     <string name="btn_activate_wallpaper">Activate Live Wallpaper</string>
     <string name="toast_error_generic">Could not open system screen</string>
 
-    <string name="crop_dialog_title">Adjust Standby Wallpaper</string>
+    <string name="crop_dialog_title">Adjust Wallpaper Crop</string>
     <string name="crop_dialog_hint">Drag with 1 finger to move • Pinch with 2 fingers to zoom</string>
     <string name="btn_save_crop">Save Wallpaper</string>
     <string name="btn_cancel">Cancel</string>

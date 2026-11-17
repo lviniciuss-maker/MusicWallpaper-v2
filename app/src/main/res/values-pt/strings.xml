@@ -7,6 +7,10 @@
     <string name="perm_status_ok">● Permissão Concedida</string>
     <string name="perm_status_missing">● Permissão Pendente</string>
     <string name="btn_grant_perm">Configurar Permissão</string>
+    <string name="btn_restricted_help">⚠️ Permissão bloqueada (Android 13+)? Veja como liberar</string>
+    <string name="restricted_help_title">Liberar Configuração Restrita (Android 13+)</string>
+    <string name="restricted_help_msg">Ao instalar o APK fora da Play Store, o Android bloqueia o Acesso a Notificações por padrão:\n\n1. Toque primeiro em \"Configurar Permissão\" e toque em MusicWallpaper (aparecerá o aviso de Configuração Restrita — toque em OK).\n\n2. Toque no botão \"Abrir Informações do App\" abaixo, vá nos 3 pontinhos (⋮) no canto superior direito e selecione \"Permitir configurações restritas\".\n\n3. Volte aqui e ative em \"Configurar Permissão\" normalmente!</string>
+    <string name="btn_open_app_info">Abrir Informações do App</string>
     <string name="btn_excluded_apps">Apps Ignorados (%1$d)</string>
     <string name="dialog_excluded_title">Escolha os Apps para Ignorar</string>
     <string name="search_apps_hint">Pesquisar aplicativo...</string>
@@ -15,13 +19,20 @@
     <string name="chk_local_only_title">Usar apenas capa da notificação (Modo Offline)</string>
     <string name="chk_local_only_desc">Ignora a busca online e usa exclusivamente a arte local enviada pela notificação do seu player de música.</string>
 
-    <string name="card_photo_title">2. Papel de Parede de Espera</string>
-    <string name="card_photo_desc">Exibido automaticamente 5 segundos após pausar a música.</string>
-    <string name="btn_pick_photo">Escolher Foto da Galeria</string>
-    <string name="status_photo_ok">✅ Foto personalizada ativa</string>
+    <string name="card_photo_title">2. Papéis de Parede (Bloqueio e Inicial)</string>
+    <string name="card_photo_desc">A foto de espera da tela de bloqueio é exibida automaticamente 5 segundos após pausar a música.</string>
+    <string name="btn_pick_photo">Escolher Foto da Tela de Bloqueio</string>
+    <string name="status_photo_ok">✅ Foto da tela de bloqueio ativa</string>
     <string name="status_photo_none">ℹ️ Nenhuma foto escolhida ainda</string>
     <string name="chooser_title">Escolha uma foto</string>
-    <string name="toast_photo_saved">Foto padrão salva com sucesso!</string>
+    <string name="toast_photo_saved">Papel de parede salvo com sucesso!</string>
+
+    <string name="chk_lockscreen_only_title">Exibir música apenas na Tela de Bloqueio</string>
+    <string name="chk_lockscreen_only_desc">Ao ativar o papel de parede no sistema, escolha \"Tela inicial e tela de bloqueio\". A capa da música aparecerá só na tela de bloqueio e a tela inicial ficará fixa.</string>
+    <string name="home_photo_section_title">Foto Estática da Tela Inicial</string>
+    <string name="btn_pick_home_photo">Escolher Foto da Tela Inicial</string>
+    <string name="status_home_photo_ok">✅ Foto da tela inicial personalizada ativa</string>
+    <string name="status_home_photo_none">ℹ️ Usando a foto de espera como padrão</string>
 
     <string name="card_pos_title">3. Ajustes da Capa e Blur</string>
     <string name="pos_label_format">Posição Vertical (do topo): %1$d%%</string>

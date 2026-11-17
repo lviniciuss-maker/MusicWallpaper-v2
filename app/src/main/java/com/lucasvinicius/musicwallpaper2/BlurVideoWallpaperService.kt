@@ -1,5 +1,6 @@
 package com.lucasvinicius.musicwallpaper2
 
+import android.app.KeyguardManager
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
@@ -58,6 +59,7 @@ class BlurVideoWallpaperService : WallpaperService() {
 
         private var exoPlayer: ExoPlayer? = null
         private val mainHandler = Handler(Looper.getMainLooper())
+        private var keyguardManager: KeyguardManager? = null
 
         private var eglDisplay: EGLDisplay = EGL14.EGL_NO_DISPLAY
         private var eglContext: EGLContext = EGL14.EGL_NO_CONTEXT
@@ -67,8 +69,9 @@ class BlurVideoWallpaperService : WallpaperService() {
         private var decoderSurface: Surface? = null
         private var oesTextureId: Int = 0
         private var staticTextureId: Int = 0
+        private var homeTextureId: Int = 0
 
-        // Dois Framebuffers (Ping-Pong) em resolução 256x340 para Blur Gaussiano Puro (Zero quadriculado)
+        // Dois Framebuffers (Ping-Pong) em resolução 256x340 para Blur Gaussiano Puro
         private var fboPass1Id: Int = 0
         private var texPass1Id: Int = 0
         private var fboPass2Id: Int = 0
@@ -84,18 +87,23 @@ class BlurVideoWallpaperService : WallpaperService() {
         private var surfaceHeight = 2400
         private var mediaWidth = 1080
         private var mediaHeight = 1440
+        private var homeMediaWidth = 1080
+        private var homeMediaHeight = 2400
 
-        // Preferências dinâmicas do usuário (Posição Vertical, Intensidade do Blur, Apps Ignorados e Modo Offline)
+        // Preferências dinâmicas do usuário
         private var userTopOffset = 0.20f
         private var userBlurScale = 1.00f
         private var excludedPackages: Set<String> = emptySet()
         private var offlineOnlyMode: Boolean = false
+        private var lockscreenOnlyMode: Boolean = false
 
         // 0 = Foto padrão da galeria (PNG 100% Lossless com Nitidez Nativa na GPU)
         // 1 = Capa estática da música (cortada nas laterais para caber na caixa 3:4) com Blur espelhado
         // 2 = Capa animada .m3u8 (3:4 nativa ou 1:1 cortada nas laterais para caixa 3:4) com Blur espelhado
         private var displayMode = 0
         private var hasStaticTexture = false
+        private var hasHomeTexture = false
+        private var wasOnHomeScreen = false
 
         private val stMatrix = FloatArray(16)
         private var hasVideoFrame = false
@@ -117,7 +125,8 @@ class BlurVideoWallpaperService : WallpaperService() {
             override fun run() {
                 if (isEngineVisible) {
                     checkCurrentMusic()
-                    mainHandler.postDelayed(this, 1500L)
+                    syncLockAndHomeState()
+                    mainHandler.postDelayed(this, 1000L)
                 }
             }
         }
@@ -139,15 +148,25 @@ class BlurVideoWallpaperService : WallpaperService() {
                 mainHandler.post {
                     when (intent?.action) {
                         "com.lucasvinicius.musicwallpaper2.ACTION_DEFAULT_WALLPAPER_UPDATED" -> {
+                            loadHomeWallpaperToOpenGL()
                             if (displayMode == 0) showDefaultWallpaper()
+                            drawFrame(updateTex = false)
                         }
                         "com.lucasvinicius.musicwallpaper2.ACTION_SETTINGS_UPDATED" -> {
                             val prevOffline = offlineOnlyMode
                             loadUserPreferences()
+                            loadHomeWallpaperToOpenGL()
                             if (prevOffline != offlineOnlyMode) {
                                 currentTrackKey = ""
                             }
                             checkCurrentMusic()
+                            syncLockAndHomeState()
+                            drawFrame(updateTex = false)
+                        }
+                        Intent.ACTION_USER_PRESENT,
+                        Intent.ACTION_SCREEN_OFF,
+                        Intent.ACTION_SCREEN_ON -> {
+                            syncLockAndHomeState()
                             drawFrame(updateTex = false)
                         }
                     }
@@ -159,10 +178,12 @@ class BlurVideoWallpaperService : WallpaperService() {
             super.onSurfaceCreated(holder)
             mainHandler.post {
                 try {
+                    keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
                     loadUserPreferences()
                     initOpenGL(holder.surface)
                     initPlayer()
                     registerUpdatesReceiver()
+                    loadHomeWallpaperToOpenGL()
                     showDefaultWallpaper()
                     startListeningToMusic()
                 } catch (e: Throwable) {
@@ -188,10 +209,8 @@ class BlurVideoWallpaperService : WallpaperService() {
                 if (visible) {
                     loadUserPreferences()
                     checkCurrentMusic()
-                    mainHandler.postDelayed(activePollRunnable, 1500L)
-                    if (displayMode == 2) {
-                        exoPlayer?.play()
-                    }
+                    syncLockAndHomeState()
+                    mainHandler.postDelayed(activePollRunnable, 1000L)
                     drawFrame(updateTex = false)
                 } else {
                     exoPlayer?.pause()
@@ -213,6 +232,30 @@ class BlurVideoWallpaperService : WallpaperService() {
             }
         }
 
+        // Verifica se deve ocultar a capa de música por estar na Tela Inicial com a chave ativa
+        private fun shouldShowHomeStaticOverride(): Boolean {
+            if (!lockscreenOnlyMode || isPreview) return false
+            val locked = keyguardManager?.isKeyguardLocked ?: false
+            return !locked
+        }
+
+        private fun syncLockAndHomeState() {
+            val onHomeNow = shouldShowHomeStaticOverride()
+            if (onHomeNow) {
+                if (exoPlayer?.isPlaying == true) {
+                    exoPlayer?.pause()
+                }
+            } else {
+                if (displayMode == 2 && isEngineVisible && exoPlayer?.isPlaying == false) {
+                    exoPlayer?.play()
+                }
+            }
+            if (onHomeNow != wasOnHomeScreen) {
+                wasOnHomeScreen = onHomeNow
+                drawFrame(updateTex = false)
+            }
+        }
+
         private fun loadUserPreferences() {
             val prefs = getSharedPreferences("wallpaper_prefs", MODE_PRIVATE)
             val percent = prefs.getInt("top_offset_percent", 20).coerceIn(0, 40)
@@ -223,6 +266,7 @@ class BlurVideoWallpaperService : WallpaperService() {
 
             excludedPackages = prefs.getStringSet("excluded_packages", emptySet())?.toSet() ?: emptySet()
             offlineOnlyMode = prefs.getBoolean("offline_only_mode", false)
+            lockscreenOnlyMode = prefs.getBoolean("lockscreen_only_mode", false)
         }
 
         private fun registerUpdatesReceiver() {
@@ -230,6 +274,9 @@ class BlurVideoWallpaperService : WallpaperService() {
                 val filter = IntentFilter().apply {
                     addAction("com.lucasvinicius.musicwallpaper2.ACTION_DEFAULT_WALLPAPER_UPDATED")
                     addAction("com.lucasvinicius.musicwallpaper2.ACTION_SETTINGS_UPDATED")
+                    addAction(Intent.ACTION_USER_PRESENT)
+                    addAction(Intent.ACTION_SCREEN_OFF)
+                    addAction(Intent.ACTION_SCREEN_ON)
                 }
                 ContextCompat.registerReceiver(
                     this@BlurVideoWallpaperService,
@@ -411,7 +458,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                     if (displayMode == 0 && safeFallbackBitmap != null) {
                         uploadStaticBitmapToOpenGL(safeFallbackBitmap, isDefaultFullWallpaper = false)
                     }
-                    if (!offlineOnlyMode && displayMode == 2 && isEngineVisible && exoPlayer?.isPlaying == false) {
+                    if (!offlineOnlyMode && displayMode == 2 && isEngineVisible && !shouldShowHomeStaticOverride() && exoPlayer?.isPlaying == false) {
                         exoPlayer?.play()
                     }
                 }
@@ -426,7 +473,7 @@ class BlurVideoWallpaperService : WallpaperService() {
             exoPlayer?.apply {
                 setMediaItem(MediaItem.fromUri(m3u8Url))
                 prepare()
-                playWhenReady = true
+                playWhenReady = !shouldShowHomeStaticOverride()
             }
         }
 
@@ -474,6 +521,40 @@ class BlurVideoWallpaperService : WallpaperService() {
             } catch (_: Throwable) {
                 null
             }
+        }
+
+        // Carrega a foto exclusiva da Tela Inicial (ou usa a foto de espera da Tela de Bloqueio como fallback)
+        private fun loadHomeWallpaperToOpenGL() {
+            if (eglDisplay == EGL14.EGL_NO_DISPLAY || eglSurface == EGL14.EGL_NO_SURFACE) return
+            try {
+                val homeFile = File(filesDir, "home_wallpaper.png")
+                val lockPngFile = File(filesDir, "default_wallpaper.png")
+                val lockJpgFile = File(filesDir, "default_wallpaper.jpg")
+
+                val fileToLoad = when {
+                    homeFile.exists() -> homeFile
+                    lockPngFile.exists() -> lockPngFile
+                    lockJpgFile.exists() -> lockJpgFile
+                    else -> null
+                }
+
+                if (fileToLoad != null && fileToLoad.exists()) {
+                    val options = BitmapFactory.Options().apply {
+                        inPreferredConfig = Bitmap.Config.ARGB_8888
+                        inScaled = false
+                    }
+                    val raw = BitmapFactory.decodeFile(fileToLoad.absolutePath, options)
+                    if (raw != null && EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)) {
+                        homeMediaWidth = raw.width.coerceAtLeast(1)
+                        homeMediaHeight = raw.height.coerceAtLeast(1)
+                        hasHomeTexture = true
+                        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, homeTextureId)
+                        GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, raw, 0)
+                        return
+                    }
+                }
+            } catch (_: Throwable) {}
+            hasHomeTexture = false
         }
 
         private fun showDefaultWallpaper() {
@@ -579,9 +660,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                     var m3u8Found: String? = null
                     var itunesMatch: Triple<String, String, String>? = null
 
-                    // =========================================================================
                     // PLANO A: Busca Vídeo Vertical 3:4 na API Principal (artwork.m8tec.top)
-                    // =========================================================================
                     if (cleanAlbum.isNotEmpty()) {
                         val encAlbum = URLEncoder.encode(cleanAlbum, "UTF-8")
                         m3u8Found = requestM3u8FromEndpoint(
@@ -600,7 +679,6 @@ class BlurVideoWallpaperService : WallpaperService() {
                         )
                     }
 
-                    // Se não achou direto pelo nome que veio do player, consulta o catálogo oficial do iTunes
                     if (m3u8Found == null) {
                         itunesMatch = queryItunesCatalog(cleanArtist, cleanAlbum, cleanTitle)
                         val officialAlbumName = itunesMatch?.first ?: ""
@@ -614,10 +692,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                         }
                     }
 
-                    // =========================================================================
                     // PLANO B AUTOMÁTICO: Extração Direta da Página da Apple Music (On-Device)
-                    // Se o servidor de terceiros estiver offline ou não tiver o álbum, extrai direto da Apple!
-                    // =========================================================================
                     if (m3u8Found == null) {
                         if (itunesMatch == null) {
                             itunesMatch = queryItunesCatalog(cleanArtist, cleanAlbum, cleanTitle)
@@ -641,9 +716,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                             startVideoPlayback(finalUrl)
                         }
                     } else {
-                        // =====================================================================
                         // PLANO C: Capa Estática 1000x1000 do iTunes ou Fallback da Notificação
-                        // =====================================================================
                         if (itunesMatch == null) {
                             itunesMatch = queryItunesCatalog(cleanArtist, cleanAlbum, cleanTitle)
                         }
@@ -673,7 +746,6 @@ class BlurVideoWallpaperService : WallpaperService() {
             }
         }
 
-        // Retorna Triple(collectionName, collectionViewUrl, highResArtworkUrl) validando Artista e Música/Álbum
         private fun queryItunesCatalog(artist: String, album: String, title: String): Triple<String, String, String>? {
             val primarySearch = fetchFromItunesEndpoint(
                 if (album.isNotEmpty()) "$artist $album" else "$artist $title",
@@ -856,6 +928,10 @@ class BlurVideoWallpaperService : WallpaperService() {
             if (displayMode != 2) {
                 displayMode = 2
             }
+            if (shouldShowHomeStaticOverride()) {
+                exoPlayer?.pause()
+                return
+            }
             drawFrame(updateTex = true)
         }
 
@@ -889,8 +965,8 @@ class BlurVideoWallpaperService : WallpaperService() {
             eglSurface = EGL14.eglCreateWindowSurface(eglDisplay, configs[0], surface, surfaceAttribs, 0)
             EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)
 
-            val textures = IntArray(4)
-            GLES20.glGenTextures(4, textures, 0)
+            val textures = IntArray(5)
+            GLES20.glGenTextures(5, textures, 0)
 
             oesTextureId = textures[0]
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTextureId)
@@ -908,6 +984,14 @@ class BlurVideoWallpaperService : WallpaperService() {
 
             texPass1Id = textures[2]
             texPass2Id = textures[3]
+            homeTextureId = textures[4]
+
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, homeTextureId)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
+
             val fbos = IntArray(2)
             GLES20.glGenFramebuffers(2, fbos, 0)
             fboPass1Id = fbos[0]
@@ -980,6 +1064,40 @@ class BlurVideoWallpaperService : WallpaperService() {
                     videoSurfaceTexture?.getTransformMatrix(stMatrix)
                 }
             } catch (_: Throwable) {
+                return
+            }
+
+            // Se o usuário habilitou "Exibir música apenas na Tela de Bloqueio" e desbloqueou o celular (está na Tela Inicial):
+            val showHomeStatic = shouldShowHomeStaticOverride()
+            if (showHomeStatic) {
+                if (!hasHomeTexture && !hasStaticTexture) {
+                    drawInitialBackground()
+                    return
+                }
+                val texToBind = if (hasHomeTexture) homeTextureId else staticTextureId
+                val wToUse = if (hasHomeTexture) homeMediaWidth else mediaWidth
+                val hToUse = if (hasHomeTexture) homeMediaHeight else mediaHeight
+
+                GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+                GLES20.glViewport(0, 0, surfaceWidth, surfaceHeight)
+                GLES20.glClearColor(0.05f, 0.05f, 0.08f, 1.0f)
+                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+
+                GLES20.glUseProgram(compositeProgram)
+                bindQuadAttributes(compositeProgram)
+
+                GLES20.glUniform2f(GLES20.glGetUniformLocation(compositeProgram, "uResolution"), surfaceWidth.toFloat(), surfaceHeight.toFloat())
+                GLES20.glUniform2f(GLES20.glGetUniformLocation(compositeProgram, "uVideoSize"), wToUse.toFloat(), hToUse.toFloat())
+                GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(compositeProgram, "uSTMatrix"), 1, false, stMatrix, 0)
+                GLES20.glUniform1i(GLES20.glGetUniformLocation(compositeProgram, "uMode"), 0) // Modo 0 = Tela cheia nítida!
+                GLES20.glUniform1f(GLES20.glGetUniformLocation(compositeProgram, "uTopOffset"), userTopOffset)
+
+                GLES20.glActiveTexture(GLES20.GL_TEXTURE1)
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texToBind)
+                GLES20.glUniform1i(GLES20.glGetUniformLocation(compositeProgram, "sStaticTexture"), 1)
+
+                GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+                EGL14.eglSwapBuffers(eglDisplay, eglSurface)
                 return
             }
 
@@ -1169,7 +1287,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                 if (m.x > 1.0) m.x = 2.0 - m.x;
                 if (m.y > 1.0) m.y = 2.0 - m.y;
                 return clamp(m, vec2(0.005), vec2(0.995));
-            }
+                }
 
             void main() {
                 vec4 sum = vec4(0.0);
