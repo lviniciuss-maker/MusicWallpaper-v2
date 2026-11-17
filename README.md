@@ -42,6 +42,39 @@ Because this app reads media sessions to detect what music is playing, Android r
 
 ---
 
+## 🛠️ Troubleshooting / Solução de Problemas Comuns
+
+### 🔒 1. Android 13 / 14 / 15 / 16: "Restricted Setting" (Configuração Restrita)
+**🇺🇸 English:**
+When installing an `.apk` outside the Play Store on Android 13+, the system blocks **Notification Access** by default for security reasons:
+1. Open **MusicWallpaper**, tap **Configure Permission**, and tap on **MusicWallpaper** in the list (a *"Restricted setting"* pop-up will appear—tap **OK**).
+2. Open your phone's **Settings > Apps > See all apps > MusicWallpaper**.
+3. Tap the **3 dots (⋮)** in the top-right corner and select **Allow restricted settings** (confirm with your fingerprint/PIN).
+4. Return to **MusicWallpaper** and enable **Configure Permission** normally.
+*(Advanced ADB alternative: `adb shell cmd notification allow_listener com.lucasvinicius.musicwallpaper2/com.lucasvinicius.musicwallpaper2.MusicNotificationListener`)*
+
+**🇧🇷 Português:**
+Ao instalar um arquivo `.apk` fora da Play Store no Android 13 ou superior, o sistema bloqueia o **Acesso a Notificações** por padrão:
+1. Abra o **MusicWallpaper**, toque em **Configurar Permissão** e toque no **MusicWallpaper** na lista (aparecerá o aviso *"Configuração restrita"* — toque em **OK**).
+2. Vá nas **Configurações do celular > Apps > Ver todos os apps > MusicWallpaper**.
+3. Toque nos **3 pontinhos (⋮)** no canto superior direito e selecione **Permitir configurações restritas** (confirme com sua digital ou PIN).
+4. Volte ao **MusicWallpaper** e ative a permissão normalmente.
+
+---
+
+### 📱 2. Honor (MagicOS) & Huawei (EMUI): Lockscreen Wallpaper Redirects to Home Screen
+**🇺🇸 English:**
+Honor's MagicOS blocks third-party Live Wallpapers from the lockscreen when **Magazine Unlock** is enabled:
+1. Go to **Settings > Home screen & wallpaper > Magazine Unlock** and turn it **OFF** (and ensure you are using the default stock theme).
+2. Install the official **Google Wallpapers** app from the Play Store, go to **Live Wallpapers**, select **MusicWallpaper**, and apply it to **Home screen and lock screen**.
+
+**🇧🇷 Português:**
+Aparelhos Honor (MagicOS) e Huawei bloqueiam papéis de parede animados na tela de bloqueio quando o **Desbloqueio de Revista (Magazine Unlock)** está ativo:
+1. Vá em **Configurações > Tela inicial e papel de parede > Magazine Unlock** e **desative** a opção (usando o tema padrão do sistema).
+2. Baixe o app oficial **Planos de fundo do Google (Google Wallpapers)** na Play Store, vá em **Planos de fundo animados**, escolha o **MusicWallpaper** e aplique na **Tela inicial e tela de bloqueio**.
+
+---
+
 ## 🚀 Getting Started / Como Executar
 
 1. Clone this repository or download the source code:
