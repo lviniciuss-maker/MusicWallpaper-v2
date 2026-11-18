@@ -19,6 +19,10 @@
     <string name="chk_local_only_title">Usar apenas capa da notificação (Modo Offline)</string>
     <string name="chk_local_only_desc">Ignora a busca online e usa exclusivamente a arte local enviada pela notificação do seu player de música.</string>
 
+    <string name="diag_box_title">🔍 Última Mídia Detectada (Toque p/ copiar)</string>
+    <string name="diag_box_empty">Nenhuma música detectada ainda. Coloque uma música para tocar para inspecionar os metadados enviados pelo player.</string>
+    <string name="toast_diag_copied">Metadados de diagnóstico copiados!</string>
+
     <string name="card_photo_title">2. Papéis de Parede (Bloqueio e Inicial)</string>
     <string name="card_photo_desc">A foto de espera da tela de bloqueio é exibida automaticamente 5 segundos após pausar a música.</string>
     <string name="btn_pick_photo">Escolher Foto da Tela de Bloqueio</string>

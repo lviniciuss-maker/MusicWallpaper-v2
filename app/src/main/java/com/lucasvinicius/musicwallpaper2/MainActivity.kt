@@ -3,10 +3,14 @@ package com.lucasvinicius.musicwallpaper2
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.WallpaperManager
+import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -19,6 +23,9 @@ import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.media.ExifInterface
+import android.media.MediaMetadata
+import android.media.session.MediaSessionManager
+import android.media.session.PlaybackState
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -43,6 +50,7 @@ import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import org.json.JSONObject
 import java.io.File
@@ -58,6 +66,7 @@ class MainActivity : AppCompatActivity() {
     private var btnRestrictedHelp: Button? = null
     private var restrictedHelpSpacer: View? = null
     private var btnExcludedApps: Button? = null
+    private var diagBodyTv: TextView? = null
 
     private var statusText: TextView? = null
     private var previewImageView: ImageView? = null
@@ -71,6 +80,14 @@ class MainActivity : AppCompatActivity() {
 
     private val githubOwner = "lviniciuss-maker"
     private val githubRepo = "MusicWallpaper-v2"
+
+    private val debugUpdateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.lucasvinicius.musicwallpaper2.ACTION_DEBUG_METADATA_UPDATED") {
+                updateDiagnosticUI()
+            }
+        }
+    }
 
     data class AppItem(
         val name: String,
@@ -121,7 +138,7 @@ class MainActivity : AppCompatActivity() {
         rootLayout.addView(subtitleText)
 
         // =========================================================================
-        // CARTÃO 1: PERMISSÃO + AJUDA CONFIGURAÇÃO RESTRITA + EXCEÇÕES + MODO OFFLINE
+        // CARTÃO 1: PERMISSÃO + EXCEÇÕES + MODO OFFLINE + PAINEL DE DIAGNÓSTICO
         // =========================================================================
         val cardPerm = createCardLayout()
 
@@ -219,6 +236,43 @@ class MainActivity : AppCompatActivity() {
             notifySettingsChanged()
         }
 
+        // Caixa de Diagnóstico de Metadados (Exibe exatamente o que o player está enviando)
+        val diagBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#13161F"))
+                cornerRadius = dp(12).toFloat()
+                setStroke(dp(1), Color.parseColor("#252B3D"))
+            }
+            setOnClickListener {
+                val textToCopy = diagBodyTv?.text?.toString() ?: ""
+                if (textToCopy.isNotEmpty()) {
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("MusicWallpaper Metadata", textToCopy))
+                    Toast.makeText(this@MainActivity, getString(R.string.toast_diag_copied), Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        val diagTitleTv = TextView(this).apply {
+            text = getString(R.string.diag_box_title)
+            setTextColor(Color.parseColor("#8AB4F8"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setPadding(0, 0, 0, dp(4))
+        }
+
+        diagBodyTv = TextView(this).apply {
+            setTextColor(Color.parseColor("#C6CCDF"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            typeface = Typeface.MONOSPACE
+            setLineSpacing(dp(2).toFloat(), 1.05f)
+        }
+
+        diagBox.addView(diagTitleTv)
+        diagBox.addView(diagBodyTv)
+
         cardPerm.addView(permTitle)
         cardPerm.addView(permDesc)
         cardPerm.addView(permStatusBadge)
@@ -229,6 +283,8 @@ class MainActivity : AppCompatActivity() {
         cardPerm.addView(btnExcludedApps)
         cardPerm.addView(createSpacer(12))
         cardPerm.addView(localOnlyRow)
+        cardPerm.addView(createSpacer(12))
+        cardPerm.addView(diagBox)
         rootLayout.addView(cardPerm)
         rootLayout.addView(createSpacer(16))
 
@@ -281,7 +337,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Chave para exibir música apenas na Tela de Bloqueio
         val lockscreenOnlyRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -326,7 +381,6 @@ class MainActivity : AppCompatActivity() {
         lockscreenOnlyRow.addView(lockscreenOnlyTextCol)
         lockscreenOnlyRow.addView(chkLockscreenOnly)
 
-        // Seção condicional para escolher a foto exclusiva da Tela Inicial (só aparece quando a chave está ativa)
         homePhotoContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(14), dp(14), dp(14))
@@ -539,8 +593,88 @@ class MainActivity : AppCompatActivity() {
 
         updatePhotoStatusUI()
         updatePermissionStatusUI()
+        updateDiagnosticUI()
 
         checkForGitHubUpdates(isManualCheck = false)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        try {
+            val filter = IntentFilter("com.lucasvinicius.musicwallpaper2.ACTION_DEBUG_METADATA_UPDATED")
+            ContextCompat.registerReceiver(this, debugUpdateReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        } catch (_: Throwable) {}
+    }
+
+    override fun onStop() {
+        super.onStop()
+        try {
+            unregisterReceiver(debugUpdateReceiver)
+        } catch (_: Throwable) {}
+    }
+
+    // Atualiza o painel de diagnóstico com os metadados salvos pelo serviço (ou inspeciona a sessão ativa ao vivo)
+    private fun updateDiagnosticUI() {
+        val prefs = getSharedPreferences("wallpaper_prefs", MODE_PRIVATE)
+        var pkg = prefs.getString("debug_last_pkg", "") ?: ""
+        var rawTitle = prefs.getString("debug_raw_title", "") ?: ""
+        var rawArtist = prefs.getString("debug_raw_artist", "") ?: ""
+        var rawAlbum = prefs.getString("debug_raw_album", "") ?: ""
+        var parsedArtist = prefs.getString("debug_parsed_artist", "") ?: ""
+        var parsedAlbum = prefs.getString("debug_parsed_album", "") ?: ""
+        var parsedTitle = prefs.getString("debug_parsed_title", "") ?: ""
+        var resultStatus = prefs.getString("debug_result_status", "") ?: ""
+
+        // Caso o usuário ainda não tenha ativado o Live Wallpaper mas esteja tocando música, lê direto da sessão ativa
+        if (isNotificationListenerEnabled()) {
+            try {
+                val excluded = prefs.getStringSet("excluded_packages", emptySet()) ?: emptySet()
+                val cn = ComponentName(this, MusicNotificationListener::class.java)
+                val msm = getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
+                val active = msm.getActiveSessions(cn).firstOrNull {
+                    it.packageName !in excluded && it.playbackState?.state == PlaybackState.STATE_PLAYING
+                }
+                if (active != null && active.metadata != null) {
+                    val m = active.metadata!!
+                    val liveTitle = (m.getString(MediaMetadata.METADATA_KEY_TITLE)
+                        ?: m.getString(MediaMetadata.METADATA_KEY_DISPLAY_TITLE) ?: "").trim()
+                    val liveArtist = (m.getString(MediaMetadata.METADATA_KEY_ARTIST)
+                        ?: m.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
+                        ?: m.getString(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE) ?: "").trim()
+                    val liveAlbum = (m.getString(MediaMetadata.METADATA_KEY_ALBUM)
+                        ?: m.getString(MediaMetadata.METADATA_KEY_DISPLAY_DESCRIPTION) ?: "").trim()
+
+                    if (pkg.isEmpty() || (liveTitle.isNotEmpty() && liveTitle != rawTitle)) {
+                        pkg = active.packageName
+                        rawTitle = liveTitle
+                        rawArtist = liveArtist
+                        rawAlbum = liveAlbum
+                        if (parsedTitle.isEmpty()) parsedTitle = liveTitle
+                        if (parsedArtist.isEmpty()) parsedArtist = liveArtist
+                        if (parsedAlbum.isEmpty()) parsedAlbum = liveAlbum
+                        if (resultStatus.isEmpty()) resultStatus = "Active in MediaSession"
+                    }
+                }
+            } catch (_: Throwable) {}
+        }
+
+        if (pkg.isEmpty() && rawTitle.isEmpty() && rawArtist.isEmpty()) {
+            diagBodyTv?.text = getString(R.string.diag_box_empty)
+            return
+        }
+
+        val info = buildString {
+            appendLine("App: $pkg")
+            appendLine("Raw Title : \"$rawTitle\"")
+            appendLine("Raw Artist: \"$rawArtist\"")
+            appendLine("Raw Album : \"$rawAlbum\"")
+            appendLine("Parsed    : Art=\"$parsedArtist\" | Alb=\"$parsedAlbum\" | Trk=\"$parsedTitle\"")
+            if (resultStatus.isNotEmpty()) {
+                append("Status    : $resultStatus")
+            }
+        }.trimEnd()
+
+        diagBodyTv?.text = info
     }
 
     private fun showRestrictedSettingsHelpDialog() {
@@ -601,9 +735,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // =========================================================================
-    // VERIFICADOR DE ATUALIZAÇÕES DIRETO DO GITHUB RELEASES
-    // =========================================================================
     private fun getInstalledVersionName(): String {
         return try {
             val pInfo = packageManager.getPackageInfo(packageName, 0)
@@ -747,9 +878,6 @@ class MainActivity : AppCompatActivity() {
         return false
     }
 
-    // =========================================================================
-    // EDITOR DE RECORTE E ZOOM COM EXTRAÇÃO DIRETA DA IMAGEM ORIGINAL (LOSSLESS)
-    // =========================================================================
     private fun showCropDialogForUri(uri: Uri, isHomeWallpaper: Boolean) {
         thread {
             val previewBitmap = loadHighResBitmapCorrectOrientation(uri, maxAllowedDim = 4096)
@@ -1245,6 +1373,7 @@ class MainActivity : AppCompatActivity() {
         updatePermissionStatusUI()
         updatePhotoStatusUI()
         updateExcludedButtonCount()
+        updateDiagnosticUI()
     }
 
     private fun isNotificationListenerEnabled(): Boolean {

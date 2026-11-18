@@ -19,6 +19,10 @@
     <string name="chk_local_only_title">Use notification artwork only (Offline Mode)</string>
     <string name="chk_local_only_desc">Skips online animated/iTunes search and uses the exact cover embedded in your media player notification.</string>
 
+    <string name="diag_box_title">🔍 Last Detected Media (Tap to copy)</string>
+    <string name="diag_box_empty">No active music detected yet. Play a song on your media player to inspect its metadata.</string>
+    <string name="toast_diag_copied">Diagnostic metadata copied to clipboard!</string>
+
     <string name="card_photo_title">2. Standby &amp; Home Wallpapers</string>
     <string name="card_photo_desc">Lockscreen standby photo is displayed automatically 5 seconds after music is paused.</string>
     <string name="btn_pick_photo">Choose Lockscreen Standby Photo</string>
