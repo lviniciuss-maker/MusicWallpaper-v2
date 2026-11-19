@@ -19,6 +19,9 @@
     <string name="chk_local_only_title">Usar apenas capa da notificação (Modo Offline)</string>
     <string name="chk_local_only_desc">Ignora a busca online e usa exclusivamente a arte local enviada pela notificação do seu player de música.</string>
 
+    <string name="chk_pixel_colors_title">Cores Dinâmicas da Capa (Exclusivo Pixel 7+)</string>
+    <string name="chk_pixel_colors_desc">Extrai as cores Material You da capa apenas na Tela de Bloqueio (intervalo de 1 min para proteger a CPU).</string>
+
     <string name="diag_box_title">🔍 Última Mídia Detectada (Toque p/ copiar)</string>
     <string name="diag_box_empty">Nenhuma música detectada ainda. Coloque uma música para tocar para inspecionar os metadados enviados pelo player.</string>
     <string name="toast_diag_copied">Metadados de diagnóstico copiados!</string>
@@ -31,9 +34,17 @@
     <string name="chooser_title">Escolha uma foto</string>
     <string name="toast_photo_saved">Papel de parede salvo com sucesso!</string>
 
+    <string name="chk_keep_cover_title">Manter última capa quando a música parar</string>
+    <string name="chk_keep_cover_desc">Ignora a foto de espera ao pausar e mantém a última capa (animada ou estática) ativa na tela de bloqueio.</string>
+
     <string name="chk_lockscreen_only_title">Exibir música apenas na Tela de Bloqueio</string>
-    <string name="chk_lockscreen_only_desc">Ao ativar o papel de parede no sistema, escolha \"Tela inicial e tela de bloqueio\". A capa da música aparecerá só na tela de bloqueio e a tela inicial ficará fixa.</string>
-    <string name="home_photo_section_title">Foto Estática da Tela Inicial</string>
+    <string name="chk_lockscreen_only_desc">Use apenas se seu aparelho não permitir aplicar o MusicWallpaper só na tela de bloqueio. Escolha a foto abaixo e aplique em \"Tela inicial e tela de bloqueio\".</string>
+    <string name="home_photo_section_title">Aparência da Tela Inicial</string>
+    <string name="chk_home_blur_title">Usar difusão (Blur) da capa na Tela Inicial</string>
+    <string name="chk_home_blur_desc">Preenche a Tela Inicial com o efeito difuso suavizado da capa do álbum atual, sem atrapalhar a leitura dos ícones e widgets.</string>
+    <string name="home_blur_photo_section_title">Foto da Tela Inicial (quando a música parar)</string>
+    <string name="btn_pick_home_blur_photo">Escolher Foto de Espera da Tela Inicial</string>
+    <string name="status_home_blur_photo_ok">✅ Foto de espera da tela inicial ativa</string>
     <string name="btn_pick_home_photo">Escolher Foto da Tela Inicial</string>
     <string name="status_home_photo_ok">✅ Foto da tela inicial personalizada ativa</string>
     <string name="status_home_photo_none">ℹ️ Usando a foto de espera como padrão</string>
@@ -41,7 +52,8 @@
     <string name="card_pos_title">3. Ajustes da Capa e Blur</string>
     <string name="pos_label_format">Posição Vertical (do topo): %1$d%%</string>
     <string name="blur_label_format">Intensidade do Blur: %1$d%%</string>
-    <string name="btn_reset_pos">Restaurar Padrão (20% Pos | 100% Blur)</string>
+    <string name="expand_label_format">Expansão da Capa (até 95%% da tela): %1$d%%</string>
+    <string name="btn_reset_pos">Restaurar Padrão (20% Pos | 100% Blur | 0% Exp)</string>
 
     <string name="btn_activate_wallpaper">Ativar Papel de Parede</string>
     <string name="toast_error_generic">Não foi possível abrir a tela do sistema</string>
@@ -58,4 +70,33 @@
     <string name="btn_later">Depois</string>
     <string name="toast_up_to_date">Você já está na versão mais recente (v%1$s)!</string>
     <string name="toast_update_check_error">Não foi possível consultar o GitHub agora.</string>
+
+    <string name="btn_faq">❓ Perguntas Frequentes (FAQ)</string>
+    <string name="faq_dialog_title">❓ Perguntas Frequentes (FAQ)</string>
+    <string name="btn_copy_adb">📋 Copiar Comandos ADB</string>
+    <string name="toast_adb_copied">Comandos ADB copiados!</string>
+
+    <string name="faq_q1">1. Como mantenho a última capa do álbum na Tela de Bloqueio sem que ela permaneça na Tela Inicial?</string>
+    <string name="faq_a1">Ative \"Manter última capa quando a música parar\" e também \"Exibir música apenas na Tela de Bloqueio\". Escolha a foto fixa desejada para a Tela Inicial e aplique o MusicWallpaper em \"Tela inicial e tela de bloqueio\". Assim, a última capa continua ativa só na Tela de Bloqueio mesmo após a música parar.</string>
+
+    <string name="faq_q2">2. Por que não consigo marcar \"Usar difusão (Blur) na Tela Inicial\" e \"Exibir música apenas na Tela de Bloqueio\" ao mesmo tempo?</string>
+    <string name="faq_a2">As duas opções controlam comportamentos diferentes para a Tela Inicial enquanto há música tocando:\n• Difusão (Blur) na Tela Inicial: exibe o efeito difuso do álbum atual e volta para a foto de espera quando a música para.\n• Apenas na Tela de Bloqueio: mantém sempre a foto fixa na Tela Inicial.\nCada opção tem seu próprio seletor independente de foto.</string>
+
+    <string name="faq_q3">3. Meu aparelho já permite aplicar Live Wallpapers só na Tela de Bloqueio. Preciso ativar \"Exibir música apenas na Tela de Bloqueio\"?</string>
+    <string name="faq_a3">Não. Essa opção é apenas para aparelhos que não permitem aplicar papéis de parede animados exclusivamente na Tela de Bloqueio. Se o seu celular já permite aplicar só na Tela de Bloqueio, deixe essa chave desativada.</string>
+
+    <string name="faq_q4">4. O Android bloqueou o Acesso a Notificações com \"Configuração restrita\". Como liberar?</string>
+    <string name="faq_a4">No Android 13+, APKs instalados fora da Play Store têm essa permissão bloqueada por padrão.\n\nOpção A — Pelo celular:\n1. Toque em \"Configurar Permissão\" e selecione MusicWallpaper (toque em OK no aviso).\n2. Abra Informações do App, toque nos 3 pontinhos (⋮) no canto superior direito e escolha \"Permitir configurações restritas\".\n3. Volte e ative o MusicWallpaper normalmente.\n\nOpção B — Via ADB (PC ou Shizuku/Termux):\nadb shell appops set com.lucasvinicius.musicwallpaper2 ACCESS_RESTRICTED_SETTINGS allow\n\nadb shell cmd notification allow_listener com.lucasvinicius.musicwallpaper2/com.lucasvinicius.musicwallpaper2.MusicNotificationListener</string>
+
+    <string name="faq_q5">5. Como evitar que vídeos do YouTube, Reels ou navegadores troquem a capa do papel de parede?</string>
+    <string name="faq_a5">No Cartão 1 (Detecção de Música), toque em \"Apps Ignorados\" e marque os aplicativos de vídeo, redes sociais ou navegadores que você não deseja monitorar.</string>
+
+    <string name="faq_q6">6. Por que algumas músicas ficam estáticas ou demoram alguns segundos no Wi-Fi lento?</string>
+    <string name="faq_a6">Nem todos os álbuns possuem arte animada oficial na Apple Music. Quando não há vídeo, o app baixa a capa estática 1000x1000 ou usa a arte da notificação. Em conexões lentas, a capa anterior continua fluindo na tela enquanto uma segunda verificação automática após 4 segundos garante o carregamento.</string>
+
+    <string name="faq_q7">7. Manter a capa animada ao pausar ou usar a Difusão na Tela Inicial gasta muita bateria?</string>
+    <string name="faq_a7">Não. O vídeo (ExoPlayer) e o blur na GPU pausam automaticamente quando a tela apaga. Na Tela Inicial com Difusão ativa, a transição dura 260ms e o vídeo pausa logo em seguida, mantendo o consumo praticamente nulo.</string>
+
+    <string name="faq_q8">8. Por que a opção \"Cores Dinâmicas da Capa (Material You)\" não aparece no meu aparelho?</string>
+    <string name="faq_a8">Esse recurso é exclusivo para aparelhos Google Pixel 7 ou superior, pois depende do motor nativo Material You na Tela de Bloqueio (com intervalo mínimo de 60 segundos entre trocas para proteger a CPU).</string>
 </resources>

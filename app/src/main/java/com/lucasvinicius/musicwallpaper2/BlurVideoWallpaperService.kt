@@ -2,6 +2,7 @@ package com.lucasvinicius.musicwallpaper2
 
 import android.animation.ValueAnimator
 import android.app.KeyguardManager
+import android.app.WallpaperColors
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
@@ -23,8 +24,10 @@ import android.opengl.EGLSurface
 import android.opengl.GLES11Ext
 import android.opengl.GLES20
 import android.opengl.GLUtils
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.service.wallpaper.WallpaperService
 import android.util.Log
 import android.view.Surface
@@ -87,24 +90,34 @@ class BlurVideoWallpaperService : WallpaperService() {
 
         private var surfaceWidth = 1080
         private var surfaceHeight = 2400
-        private var mediaWidth = 1080
-        private var mediaHeight = 1440
+
+        // Dimensões separadas para evitar esticamento lateral na troca de m3u8 para imagem estática
+        private var currentVideoWidth = 1080
+        private var currentVideoHeight = 1440
+        private var currentStaticWidth = 1080
+        private var currentStaticHeight = 1080
+
         private var homeMediaWidth = 1080
         private var homeMediaHeight = 2400
 
         // Preferências dinâmicas do usuário
         private var userTopOffset = 0.20f
         private var userBlurScale = 1.00f
+        private var userCoverExpansion = 0.00f
         private var excludedPackages: Set<String> = emptySet()
         private var offlineOnlyMode: Boolean = false
         private var lockscreenOnlyMode: Boolean = false
+        private var keepLastCoverOnPause: Boolean = false
+        private var homeUseAlbumBlur: Boolean = false
+        private var pixelDynamicColorsEnabled: Boolean = false
 
         // 0 = Foto padrão da galeria (PNG 100% Lossless com Nitidez Nativa na GPU)
-        // 1 = Capa estática da música (cortada nas laterais para caber na caixa 3:4) com Blur espelhado
-        // 2 = Capa animada .m3u8 (3:4 nativa ou 1:1 cortada nas laterais para caixa 3:4) com Blur espelhado
+        // 1 = Capa estática da música (cortada nas laterais para caber na caixa) com Blur espelhado
+        // 2 = Capa animada .m3u8 (3:4 nativa ou 1:1 cortada nas laterais) com Blur espelhado
         private var displayMode = 0
         private var hasStaticTexture = false
         private var hasHomeTexture = false
+        private var hasValidBlurTexture = false
         private var wasOnHomeScreen = false
 
         // Controle de transição suave (Fade 0.0f = Tela de Bloqueio | 1.0f = Tela Inicial)
@@ -126,6 +139,12 @@ class BlurVideoWallpaperService : WallpaperService() {
         private var lastNotificationBitmapSignature: Int = 0
         private var stalePreviousTrackSignature: Int = 0
 
+        // Controle de Cores Dinâmicas Material You (Exclusivo Pixel 7+ na Tela de Bloqueio com Cooldown de 60s)
+        private var latestCalculatedWallpaperColors: WallpaperColors? = null
+        private var lastColorNotifyRealtimeMs: Long = 0L
+        private val colorCooldownMs = 60_000L
+        private var pendingColorNotifyRunnable: Runnable? = null
+
         private var mediaSessionManager: MediaSessionManager? = null
         private val controllerCallbacks = mutableMapOf<MediaController, MediaController.Callback>()
 
@@ -135,7 +154,6 @@ class BlurVideoWallpaperService : WallpaperService() {
             applyNoMusicStateNow()
         }
 
-        // Segunda checagem automática após 4 segundos (para conexões Wi-Fi lentas ou atraso no Bitchord)
         private var secondCheckRunnable: Runnable? = null
 
         private val activePollRunnable = object : Runnable {
@@ -178,7 +196,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                             }
                             checkCurrentMusic()
                             syncLockAndHomeState(immediate = true)
-                            drawFrame(updateTex = false)
+                            drawFrame(updateTex = false, forceBlurPass = homeUseAlbumBlur)
                         }
                         Intent.ACTION_USER_PRESENT,
                         Intent.ACTION_SCREEN_OFF,
@@ -214,7 +232,7 @@ class BlurVideoWallpaperService : WallpaperService() {
             mainHandler.post {
                 surfaceWidth = width.coerceAtLeast(1)
                 surfaceHeight = height.coerceAtLeast(1)
-                drawFrame(updateTex = false)
+                drawFrame(updateTex = false, forceBlurPass = homeUseAlbumBlur && !hasValidBlurTexture)
             }
         }
 
@@ -228,7 +246,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                     checkCurrentMusic()
                     syncLockAndHomeState()
                     mainHandler.postDelayed(activePollRunnable, 1000L)
-                    drawFrame(updateTex = false)
+                    drawFrame(updateTex = false, forceBlurPass = homeUseAlbumBlur && !hasValidBlurTexture)
                 } else {
                     homeFadeAnimator?.cancel()
                     exoPlayer?.pause()
@@ -242,6 +260,7 @@ class BlurVideoWallpaperService : WallpaperService() {
             mainHandler.post {
                 homeFadeAnimator?.cancel()
                 secondCheckRunnable?.let { mainHandler.removeCallbacks(it) }
+                pendingColorNotifyRunnable?.let { mainHandler.removeCallbacks(it) }
                 mainHandler.removeCallbacks(activePollRunnable)
                 mainHandler.removeCallbacks(noMusicDelayRunnable)
                 isWaitingForPauseDelay = false
@@ -252,8 +271,73 @@ class BlurVideoWallpaperService : WallpaperService() {
             }
         }
 
+        override fun onComputeColors(): WallpaperColors? {
+            if (!pixelDynamicColorsEnabled || !isGooglePixel7OrNewerDevice()) {
+                return super.onComputeColors()
+            }
+            return latestCalculatedWallpaperColors ?: super.onComputeColors()
+        }
+
+        private fun isGooglePixel7OrNewerDevice(): Boolean {
+            val isGoogle = Build.BRAND.equals("google", ignoreCase = true) ||
+                    Build.MANUFACTURER.equals("google", ignoreCase = true)
+            if (!isGoogle) return false
+            val model = Build.MODEL?.lowercase() ?: ""
+            if (!model.contains("pixel")) return false
+            val numMatch = Regex("""pixel\s*(\d+)""").find(model)?.groupValues?.get(1)?.toIntOrNull()
+            if (numMatch != null) return numMatch >= 7
+            return model.contains("fold") || model.contains("tablet")
+        }
+
+        private fun updateCoverColorsForPixelLockscreen(sourceBitmap: Bitmap?) {
+            if (!pixelDynamicColorsEnabled || !isGooglePixel7OrNewerDevice() || sourceBitmap == null || sourceBitmap.isRecycled) return
+            thread {
+                try {
+                    val tiny = Bitmap.createScaledBitmap(sourceBitmap, 64, 64, true)
+                    val computed = WallpaperColors.fromBitmap(tiny)
+                    latestCalculatedWallpaperColors = computed
+                    mainHandler.post {
+                        requestPixelLockscreenColorNotify()
+                    }
+                } catch (_: Throwable) {}
+            }
+        }
+
+        private fun requestPixelLockscreenColorNotify() {
+            if (!pixelDynamicColorsEnabled || !isGooglePixel7OrNewerDevice()) return
+            val isLocked = keyguardManager?.isKeyguardLocked ?: false
+            if (!isLocked) return
+
+            val now = SystemClock.elapsedRealtime()
+            val elapsed = now - lastColorNotifyRealtimeMs
+
+            if (lastColorNotifyRealtimeMs == 0L || elapsed >= colorCooldownMs) {
+                lastColorNotifyRealtimeMs = now
+                pendingColorNotifyRunnable?.let { mainHandler.removeCallbacks(it) }
+                pendingColorNotifyRunnable = null
+                try {
+                    notifyColorsChanged()
+                    Log.d("BlurWallpaper", "Pixel 7+ Material You: Cores da capa aplicadas na Tela de Bloqueio.")
+                } catch (_: Throwable) {}
+            } else if (pendingColorNotifyRunnable == null) {
+                val remaining = (colorCooldownMs - elapsed).coerceAtLeast(1000L)
+                val runnable = Runnable {
+                    pendingColorNotifyRunnable = null
+                    if (pixelDynamicColorsEnabled && (keyguardManager?.isKeyguardLocked == true)) {
+                        lastColorNotifyRealtimeMs = SystemClock.elapsedRealtime()
+                        try {
+                            notifyColorsChanged()
+                            Log.d("BlurWallpaper", "Pixel 7+ Material You (Cooldown 60s concluído): Cores aplicadas.")
+                        } catch (_: Throwable) {}
+                    }
+                }
+                pendingColorNotifyRunnable = runnable
+                mainHandler.postDelayed(runnable, remaining)
+            }
+        }
+
         private fun shouldShowHomeStaticOverride(): Boolean {
-            if (!lockscreenOnlyMode || isPreview) return false
+            if ((!lockscreenOnlyMode && !homeUseAlbumBlur) || isPreview) return false
             val locked = keyguardManager?.isKeyguardLocked ?: false
             return !locked
         }
@@ -267,11 +351,13 @@ class BlurVideoWallpaperService : WallpaperService() {
                 wasOnHomeScreen = onHomeNow
                 homeTransitionAlpha = targetAlpha
                 if (onHomeNow) {
-                    exoPlayer?.pause()
+                    if (!homeUseAlbumBlur || hasValidBlurTexture) {
+                        exoPlayer?.pause()
+                    }
                 } else if (displayMode == 2 && isEngineVisible && exoPlayer?.isPlaying == false) {
                     exoPlayer?.play()
                 }
-                drawFrame(updateTex = false)
+                drawFrame(updateTex = false, forceBlurPass = onHomeNow && homeUseAlbumBlur && !hasValidBlurTexture)
                 return
             }
 
@@ -302,7 +388,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                 }
             } else if (homeFadeAnimator?.isRunning != true) {
                 homeTransitionAlpha = targetAlpha
-                if (onHomeNow && exoPlayer?.isPlaying == true) {
+                if (onHomeNow && exoPlayer?.isPlaying == true && (!homeUseAlbumBlur || hasValidBlurTexture)) {
                     exoPlayer?.pause()
                 } else if (!onHomeNow && displayMode == 2 && isEngineVisible && exoPlayer?.isPlaying == false) {
                     exoPlayer?.play()
@@ -318,9 +404,15 @@ class BlurVideoWallpaperService : WallpaperService() {
             val blurPercent = prefs.getInt("blur_strength_percent", 100).coerceIn(60, 100)
             userBlurScale = blurPercent / 100f
 
+            val expandPercent = prefs.getInt("cover_expansion_percent", 0).coerceIn(0, 100)
+            userCoverExpansion = expandPercent / 100f
+
             excludedPackages = prefs.getStringSet("excluded_packages", emptySet())?.toSet() ?: emptySet()
             offlineOnlyMode = prefs.getBoolean("offline_only_mode", false)
             lockscreenOnlyMode = prefs.getBoolean("lockscreen_only_mode", false)
+            keepLastCoverOnPause = prefs.getBoolean("keep_last_cover_on_pause", false)
+            homeUseAlbumBlur = prefs.getBoolean("home_use_album_blur", false)
+            pixelDynamicColorsEnabled = prefs.getBoolean("pixel_dynamic_colors", false)
         }
 
         private fun saveAndBroadcastDebugMetadata(
@@ -457,7 +549,6 @@ class BlurVideoWallpaperService : WallpaperService() {
             }
         }
 
-        // Agenda uma segunda checagem 4 segundos após a troca de música para redes Wi-Fi lentas
         private fun scheduleDelayedSecondVerification(
             trackKey: String,
             artist: String,
@@ -468,12 +559,7 @@ class BlurVideoWallpaperService : WallpaperService() {
             secondCheckRunnable?.let { mainHandler.removeCallbacks(it) }
             val runnable = Runnable {
                 if (generation != searchGeneration || currentTrackKey != trackKey) return@Runnable
-
-                // 1. Reinspeciona os metadados e o Bitmap atuais da notificação após 4 segundos
                 checkCurrentMusic()
-
-                // 2. Se estamos no modo online, ainda não conseguimos capa online (nem vídeo nem iTunes)
-                // e a 1ª busca já terminou sem sucesso por lentidão do Wi-Fi, dispara a 2ª tentativa aos 4s!
                 if (!offlineOnlyMode && !isUsingOnlineCover && !isSearchInProgress) {
                     Log.d("BlurWallpaper", "Checagem de 4s: Reiniciando busca online para $title (Wi-Fi lento)")
                     fetchCoverForTrack(trackKey, artist, album, title, generation, isRetryAttempt = true)
@@ -586,8 +672,11 @@ class BlurVideoWallpaperService : WallpaperService() {
                         status = if (offlineOnlyMode) "Offline Mode (Local Notification Cover)" else "Searching online..."
                     )
 
-                    // Mantemos o vídeo anterior rodando suavemente até que a nova capa (animada, iTunes ou notificação) esteja pronta!
                     currentPlayingM3u8Url = null
+
+                    if (isFreshNotificationBitmap && safeFallbackBitmap != null) {
+                        updateCoverColorsForPixelLockscreen(safeFallbackBitmap)
+                    }
 
                     if (offlineOnlyMode) {
                         if (isFreshNotificationBitmap && safeFallbackBitmap != null) {
@@ -611,10 +700,9 @@ class BlurVideoWallpaperService : WallpaperService() {
                     if (cachedOnlineBitmap != null) {
                         isUsingOnlineCover = true
                         hasUpdatedCoverForCurrentTrack = true
+                        updateCoverColorsForPixelLockscreen(cachedOnlineBitmap)
                         uploadStaticBitmapToOpenGL(cachedOnlineBitmap, isDefaultFullWallpaper = false)
                     } else if (displayMode != 2 && isFreshNotificationBitmap && safeFallbackBitmap != null) {
-                        // Se não estava tocando vídeo (ex: estava em capa estática ou na foto de espera), já adianta a capa fresca da notificação.
-                        // Se estava em vídeo (displayMode == 2), deixa o vídeo anterior fluindo até a busca terminar!
                         hasUpdatedCoverForCurrentTrack = true
                         uploadStaticBitmapToOpenGL(safeFallbackBitmap, isDefaultFullWallpaper = false)
                     }
@@ -622,8 +710,6 @@ class BlurVideoWallpaperService : WallpaperService() {
                     fetchCoverForTrack(newKey, artist, album, title, currentGen, isRetryAttempt = false)
                     scheduleDelayedSecondVerification(newKey, artist, album, title, currentGen)
                 } else {
-                    // Mesma música tocando: só aplica a capa da notificação se a busca online já terminou (!isSearchInProgress)
-                    // e não encontrou capa online (!isUsingOnlineCover), evitando cortar o vídeo em andamento durante a busca.
                     if (safeFallbackBitmap != null && !isUsingOnlineCover && !isSearchInProgress) {
                         val isNoLongerStale = (stalePreviousTrackSignature == 0 || currentBmpSignature != stalePreviousTrackSignature)
                         if (isNoLongerStale && (!hasUpdatedCoverForCurrentTrack || displayMode == 0 || currentBmpSignature != lastNotificationBitmapSignature)) {
@@ -631,6 +717,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                             stalePreviousTrackSignature = 0
                             hasUpdatedCoverForCurrentTrack = true
                             Log.d("BlurWallpaper", "Aplicando capa da notificação após confirmação.")
+                            updateCoverColorsForPixelLockscreen(safeFallbackBitmap)
                             uploadStaticBitmapToOpenGL(safeFallbackBitmap, isDefaultFullWallpaper = false)
                         }
                     }
@@ -649,11 +736,19 @@ class BlurVideoWallpaperService : WallpaperService() {
             exoPlayer?.apply {
                 setMediaItem(MediaItem.fromUri(m3u8Url))
                 prepare()
-                playWhenReady = (homeTransitionAlpha < 1f)
+                playWhenReady = (homeTransitionAlpha < 1f) || homeUseAlbumBlur
             }
         }
 
         private fun scheduleNoMusicFallback() {
+            if (keepLastCoverOnPause && (displayMode == 1 || displayMode == 2)) {
+                if (isWaitingForPauseDelay) {
+                    mainHandler.removeCallbacks(noMusicDelayRunnable)
+                    isWaitingForPauseDelay = false
+                }
+                return
+            }
+
             if (displayMode == 0 && currentTrackKey.isEmpty()) return
             if (!isWaitingForPauseDelay) {
                 isWaitingForPauseDelay = true
@@ -662,6 +757,8 @@ class BlurVideoWallpaperService : WallpaperService() {
         }
 
         private fun applyNoMusicStateNow() {
+            if (keepLastCoverOnPause && (displayMode == 1 || displayMode == 2)) return
+
             if (currentTrackKey.isNotEmpty() || displayMode != 0) {
                 secondCheckRunnable?.let { mainHandler.removeCallbacks(it) }
                 currentTrackKey = ""
@@ -705,12 +802,16 @@ class BlurVideoWallpaperService : WallpaperService() {
         private fun loadHomeWallpaperToOpenGL() {
             if (eglDisplay == EGL14.EGL_NO_DISPLAY || eglSurface == EGL14.EGL_NO_SURFACE) return
             try {
-                val homeFile = File(filesDir, "home_wallpaper.png")
+                val primaryHomeFile = if (homeUseAlbumBlur) {
+                    File(filesDir, "home_blur_wallpaper.png")
+                } else {
+                    File(filesDir, "home_wallpaper.png")
+                }
                 val lockPngFile = File(filesDir, "default_wallpaper.png")
                 val lockJpgFile = File(filesDir, "default_wallpaper.jpg")
 
                 val fileToLoad = when {
-                    homeFile.exists() -> homeFile
+                    primaryHomeFile.exists() -> primaryHomeFile
                     lockPngFile.exists() -> lockPngFile
                     lockJpgFile.exists() -> lockJpgFile
                     else -> null
@@ -756,6 +857,7 @@ class BlurVideoWallpaperService : WallpaperService() {
             exoPlayer?.pause()
             exoPlayer?.clearMediaItems()
             hasVideoFrame = false
+            hasValidBlurTexture = false
             currentPlayingM3u8Url = null
             displayMode = 0
             hasStaticTexture = false
@@ -767,21 +869,22 @@ class BlurVideoWallpaperService : WallpaperService() {
             try {
                 if (!EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)) return
 
-                // Ao aplicar oficialmente uma capa estática (seja do iTunes, da notificação ou de espera),
-                // aí sim encerramos o vídeo que estava mantendo a tela viva durante o carregamento!
                 exoPlayer?.pause()
                 exoPlayer?.clearMediaItems()
                 hasVideoFrame = false
                 currentPlayingM3u8Url = null
 
-                mediaWidth = bitmap.width.coerceAtLeast(1)
-                mediaHeight = bitmap.height.coerceAtLeast(1)
+                currentStaticWidth = bitmap.width.coerceAtLeast(1)
+                currentStaticHeight = bitmap.height.coerceAtLeast(1)
+
                 displayMode = if (isDefaultFullWallpaper) 0 else 1
                 hasStaticTexture = true
+                if (isDefaultFullWallpaper) hasValidBlurTexture = false
 
                 GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, staticTextureId)
                 GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
-                drawFrame(updateTex = false)
+
+                drawFrame(updateTex = false, forceBlurPass = !isDefaultFullWallpaper)
             } catch (e: Throwable) {
                 Log.e("BlurWallpaper", "Erro no uploadStaticBitmapToOpenGL", e)
             }
@@ -795,8 +898,8 @@ class BlurVideoWallpaperService : WallpaperService() {
                 addListener(object : Player.Listener {
                     override fun onVideoSizeChanged(videoSize: VideoSize) {
                         if (videoSize.width > 0 && videoSize.height > 0) {
-                            mediaWidth = videoSize.width
-                            mediaHeight = videoSize.height
+                            currentVideoWidth = videoSize.width
+                            currentVideoHeight = videoSize.height
                         }
                     }
 
@@ -804,7 +907,10 @@ class BlurVideoWallpaperService : WallpaperService() {
                         displayMode = 2
                         hasVideoFrame = true
                         hasUpdatedCoverForCurrentTrack = true
-                        drawFrame(updateTex = true)
+                        drawFrame(updateTex = true, forceBlurPass = true)
+                        if (homeTransitionAlpha >= 1f) {
+                            exoPlayer?.pause()
+                        }
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
@@ -854,7 +960,6 @@ class BlurVideoWallpaperService : WallpaperService() {
                     var m3u8SourceLabel = if (isRetryAttempt) "Plan A (Retry 4s)" else "Plan A (3:4 API)"
                     var itunesMatch: Triple<String, String, String>? = null
 
-                    // PLANO A: Busca Vídeo Vertical 3:4 na API Principal (artwork.m8tec.top)
                     if (cleanAlbum.isNotEmpty()) {
                         val encAlbum = URLEncoder.encode(cleanAlbum, "UTF-8")
                         m3u8Found = requestM3u8FromEndpoint(
@@ -886,7 +991,6 @@ class BlurVideoWallpaperService : WallpaperService() {
                         }
                     }
 
-                    // PLANO B AUTOMÁTICO: Extração Direta da Página da Apple Music (On-Device)
                     if (m3u8Found == null) {
                         if (itunesMatch == null) {
                             itunesMatch = queryItunesCatalog(cleanArtist, cleanAlbum, cleanTitle)
@@ -896,7 +1000,6 @@ class BlurVideoWallpaperService : WallpaperService() {
                             m3u8Found = extractM3u8FromAppleMusicPage(collectionViewUrl)
                             if (m3u8Found != null) {
                                 m3u8SourceLabel = if (isRetryAttempt) "Plan B (Retry 4s)" else "Plan B (Apple Direct .m3u8)"
-                                Log.d("BlurWallpaper", "Plano B ativado! Vídeo .m3u8 extraído direto da Apple: $m3u8Found")
                             }
                         }
                     }
@@ -921,7 +1024,6 @@ class BlurVideoWallpaperService : WallpaperService() {
                             startVideoPlayback(finalUrl)
                         }
                     } else {
-                        // PLANO C: Capa Estática 1000x1000 do iTunes ou Fallback da Notificação
                         if (itunesMatch == null) {
                             itunesMatch = queryItunesCatalog(cleanArtist, cleanAlbum, cleanTitle)
                         }
@@ -947,6 +1049,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                                     parsedTitle = cleanTitle,
                                     status = if (isRetryAttempt) "🖼️ Static (iTunes 1000x1000 - Retry 4s)" else "🖼️ Static (iTunes 1000x1000)"
                                 )
+                                updateCoverColorsForPixelLockscreen(safeOnlineStatic)
                                 uploadStaticBitmapToOpenGL(safeOnlineStatic, isDefaultFullWallpaper = false)
                             } else {
                                 isUsingOnlineCover = false
@@ -956,8 +1059,6 @@ class BlurVideoWallpaperService : WallpaperService() {
                                     parsedTitle = cleanTitle,
                                     status = if (isRetryAttempt) "📱 Static (Notification Fallback - Verified 4s)" else "📱 Static (Notification Fallback - Waiting 4s check)"
                                 )
-                                // Agora que isSearchInProgress é false, checkCurrentMusic() aplicará imediatamente
-                                // a capa da notificação (e pausará o vídeo anterior dentro de uploadStaticBitmapToOpenGL)!
                                 checkCurrentMusic()
 
                                 if (isRetryAttempt && !hasUpdatedCoverForCurrentTrack) {
@@ -1050,23 +1151,15 @@ class BlurVideoWallpaperService : WallpaperService() {
 
                 val artistRegex = Regex(""""(?:artist|artistName|artist_name)"\s*:\s*"([^"]+)"""")
                 val returnedArtist = artistRegex.find(body)?.groupValues?.get(1)?.trim()
-                if (!returnedArtist.isNullOrEmpty() && !isArtistMatch(expectedArtist, returnedArtist)) {
-                    Log.d("BlurWallpaper", "Vídeo descartado (Artista diferente)! Esperado: $expectedArtist | Veio: $returnedArtist")
-                    return null
-                }
+                if (!returnedArtist.isNullOrEmpty() && !isArtistMatch(expectedArtist, returnedArtist)) return null
 
                 val albumRegex = Regex(""""(?:album|albumName|album_name|collectionName|title)"\s*:\s*"([^"]+)"""")
                 val returnedAlbum = albumRegex.find(body)?.groupValues?.get(1)?.trim()
-                if (!returnedAlbum.isNullOrEmpty() && expectedAlbumOrTitle.isNotEmpty() && !isTextMatch(expectedAlbumOrTitle, returnedAlbum)) {
-                    Log.d("BlurWallpaper", "Vídeo descartado (Álbum diferente)! Esperado: $expectedAlbumOrTitle | Veio: $returnedAlbum")
-                    return null
-                }
+                if (!returnedAlbum.isNullOrEmpty() && expectedAlbumOrTitle.isNotEmpty() && !isTextMatch(expectedAlbumOrTitle, returnedAlbum)) return null
 
                 val tallFieldRegex = Regex(""""(?:url_tall|tall_url|tallUrl|editorialVideoTall)"\s*:\s*"(https:[^"]+\.m3u8)"""")
                 val tallMatch = tallFieldRegex.find(body)?.groupValues?.get(1)?.replace("\\/", "/")
-                if (!tallMatch.isNullOrEmpty()) {
-                    return tallMatch
-                }
+                if (!tallMatch.isNullOrEmpty()) return tallMatch
 
                 val regex = Regex("""https://[^\s"'<>\\]+\.m3u8""")
                 val matches = regex.findAll(body).map { it.value.replace("\\/", "/") }.toList()
@@ -1086,10 +1179,7 @@ class BlurVideoWallpaperService : WallpaperService() {
 
         private fun extractM3u8FromAppleMusicPage(collectionViewUrl: String): String? {
             return try {
-                val appleMusicUrl = collectionViewUrl
-                    .replace("itunes.apple.com", "music.apple.com")
-                    .trim()
-
+                val appleMusicUrl = collectionViewUrl.replace("itunes.apple.com", "music.apple.com").trim()
                 val conn = (URL(appleMusicUrl).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 5500
                     readTimeout = 5500
@@ -1104,10 +1194,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                 if (conn.responseCode !in 200..299) return null
 
                 val html = conn.inputStream.bufferedReader().readText()
-                val normalizedHtml = html
-                    .replace("\\/", "/")
-                    .replace("\\u002F", "/")
-                    .replace("&amp;", "&")
+                val normalizedHtml = html.replace("\\/", "/").replace("\\u002F", "/").replace("&amp;", "&")
 
                 val regex = Regex("""https://[^\s"'<>\\]+\.m3u8""")
                 val matches = regex.findAll(normalizedHtml).map { it.value }.distinct().toList()
@@ -1160,6 +1247,9 @@ class BlurVideoWallpaperService : WallpaperService() {
                 displayMode = 2
             }
             if (homeTransitionAlpha >= 1f) {
+                if (homeUseAlbumBlur) {
+                    drawFrame(updateTex = true, forceBlurPass = true)
+                }
                 exoPlayer?.pause()
                 return
             }
@@ -1285,7 +1375,7 @@ class BlurVideoWallpaperService : WallpaperService() {
             GLES20.glVertexAttribPointer(texHandle, 2, GLES20.GL_FLOAT, false, 16, vertexBuffer)
         }
 
-        private fun drawFrame(updateTex: Boolean) {
+        private fun drawFrame(updateTex: Boolean, forceBlurPass: Boolean = false) {
             if (eglDisplay == EGL14.EGL_NO_DISPLAY || eglSurface == EGL14.EGL_NO_SURFACE) return
             if (!EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)) return
 
@@ -1298,28 +1388,10 @@ class BlurVideoWallpaperService : WallpaperService() {
                 return
             }
 
-            val effectiveHomeAlpha = if (lockscreenOnlyMode && !isPreview) homeTransitionAlpha else 0f
+            val effectiveHomeAlpha = if ((lockscreenOnlyMode || homeUseAlbumBlur) && !isPreview) homeTransitionAlpha else 0f
+            val canRunBlurOnActiveMedia = (displayMode == 1 && hasStaticTexture) || (displayMode == 2 && hasVideoFrame)
 
-            if (effectiveHomeAlpha >= 1f && !hasHomeTexture && !hasStaticTexture) {
-                drawInitialBackground()
-                return
-            }
-
-            if (effectiveHomeAlpha < 1f) {
-                if (displayMode == 0 && !hasStaticTexture) {
-                    if (effectiveHomeAlpha > 0f && hasHomeTexture) {
-                        // Permite desenhar a transição se tiver foto da tela inicial
-                    } else {
-                        drawInitialBackground()
-                        return
-                    }
-                }
-                if (displayMode == 2 && !hasVideoFrame && effectiveHomeAlpha <= 0f) {
-                    return
-                }
-            }
-
-            if (effectiveHomeAlpha < 1f && (displayMode == 1 || displayMode == 2)) {
+            if (canRunBlurOnActiveMedia && (effectiveHomeAlpha < 1f || forceBlurPass || (homeUseAlbumBlur && !hasValidBlurTexture))) {
                 GLES20.glViewport(0, 0, fboWidth, fboHeight)
 
                 GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fboPass1Id)
@@ -1358,6 +1430,29 @@ class BlurVideoWallpaperService : WallpaperService() {
                 GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
                 GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texPass1Id)
                 GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+
+                hasValidBlurTexture = true
+            }
+
+            val canUseAlbumBlurOnHome = homeUseAlbumBlur && hasValidBlurTexture && (displayMode == 1 || displayMode == 2)
+
+            if (effectiveHomeAlpha >= 1f && !canUseAlbumBlurOnHome && !hasHomeTexture && !hasStaticTexture) {
+                drawInitialBackground()
+                return
+            }
+
+            if (effectiveHomeAlpha < 1f) {
+                if (displayMode == 0 && !hasStaticTexture) {
+                    if (effectiveHomeAlpha > 0f && hasHomeTexture) {
+                        // Permite desenhar a transição se tiver foto da tela inicial
+                    } else {
+                        drawInitialBackground()
+                        return
+                    }
+                }
+                if (displayMode == 2 && !hasVideoFrame && effectiveHomeAlpha <= 0f) {
+                    return
+                }
             }
 
             GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
@@ -1368,17 +1463,22 @@ class BlurVideoWallpaperService : WallpaperService() {
             GLES20.glUseProgram(compositeProgram)
             bindQuadAttributes(compositeProgram)
 
+            val activeMediaW = if (displayMode == 2) currentVideoWidth.toFloat() else currentStaticWidth.toFloat()
+            val activeMediaH = if (displayMode == 2) currentVideoHeight.toFloat() else currentStaticHeight.toFloat()
+
             val homeTexToBind = if (hasHomeTexture) homeTextureId else staticTextureId
-            val homeWToUse = if (hasHomeTexture) homeMediaWidth else mediaWidth
-            val homeHToUse = if (hasHomeTexture) homeMediaHeight else mediaHeight
+            val homeWToUse = if (hasHomeTexture) homeMediaWidth else currentStaticWidth
+            val homeHToUse = if (hasHomeTexture) homeMediaHeight else currentStaticHeight
 
             GLES20.glUniform2f(GLES20.glGetUniformLocation(compositeProgram, "uResolution"), surfaceWidth.toFloat(), surfaceHeight.toFloat())
-            GLES20.glUniform2f(GLES20.glGetUniformLocation(compositeProgram, "uVideoSize"), mediaWidth.toFloat(), mediaHeight.toFloat())
+            GLES20.glUniform2f(GLES20.glGetUniformLocation(compositeProgram, "uVideoSize"), activeMediaW, activeMediaH)
             GLES20.glUniform2f(GLES20.glGetUniformLocation(compositeProgram, "uHomeSize"), homeWToUse.toFloat(), homeHToUse.toFloat())
             GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(compositeProgram, "uSTMatrix"), 1, false, stMatrix, 0)
             GLES20.glUniform1i(GLES20.glGetUniformLocation(compositeProgram, "uMode"), displayMode)
             GLES20.glUniform1f(GLES20.glGetUniformLocation(compositeProgram, "uTopOffset"), userTopOffset)
+            GLES20.glUniform1f(GLES20.glGetUniformLocation(compositeProgram, "uCoverExpansion"), userCoverExpansion)
             GLES20.glUniform1f(GLES20.glGetUniformLocation(compositeProgram, "uHomeAlpha"), effectiveHomeAlpha)
+            GLES20.glUniform1i(GLES20.glGetUniformLocation(compositeProgram, "uHomeUseBlur"), if (canUseAlbumBlurOnHome) 1 else 0)
 
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTextureId)
@@ -1412,6 +1512,7 @@ class BlurVideoWallpaperService : WallpaperService() {
             eglDisplay = EGL14.EGL_NO_DISPLAY
             eglContext = EGL14.EGL_NO_CONTEXT
             eglSurface = EGL14.EGL_NO_SURFACE
+            hasValidBlurTexture = false
         }
 
         private fun createShaderProgram(vertexSource: String, fragmentSource: String): Int {
@@ -1541,7 +1642,9 @@ class BlurVideoWallpaperService : WallpaperService() {
             uniform mat4 uSTMatrix;
             uniform int uMode;
             uniform float uTopOffset;
+            uniform float uCoverExpansion;
             uniform float uHomeAlpha;
+            uniform int uHomeUseBlur;
 
             const bool STRETCH_1X1_VERTICALLY = false;
 
@@ -1579,6 +1682,21 @@ class BlurVideoWallpaperService : WallpaperService() {
                 return sum;
             }
 
+            vec4 sampleHomeDiffusion(vec2 uv) {
+                vec2 s1 = vec2(0.045, 0.035);
+                vec2 s2 = vec2(0.095, 0.075);
+                vec4 sum = sampleSilkyBlur(uv) * 0.24;
+                sum += sampleSilkyBlur(uv + vec2( s1.x,  0.0)) * 0.10;
+                sum += sampleSilkyBlur(uv + vec2(-s1.x,  0.0)) * 0.10;
+                sum += sampleSilkyBlur(uv + vec2( 0.0,  s1.y)) * 0.10;
+                sum += sampleSilkyBlur(uv + vec2( 0.0, -s1.y)) * 0.10;
+                sum += sampleSilkyBlur(uv + vec2( s2.x,  s2.y)) * 0.09;
+                sum += sampleSilkyBlur(uv + vec2(-s2.x,  s2.y)) * 0.09;
+                sum += sampleSilkyBlur(uv + vec2( s2.x, -s2.y)) * 0.09;
+                sum += sampleSilkyBlur(uv + vec2(-s2.x, -s2.y)) * 0.09;
+                return vec4(sum.rgb * 0.82, 1.0);
+            }
+
             vec4 sampleSharpenedStatic(sampler2D tex, vec2 texSize, float screenY) {
                 float imgAspect = texSize.x / max(texSize.y, 1.0);
                 float screenAspect = uResolution.x / max(uResolution.y, 1.0);
@@ -1604,11 +1722,31 @@ class BlurVideoWallpaperService : WallpaperService() {
                 return clamp(sharpened, 0.0, 1.0);
             }
 
+            vec4 computeHomeLayerColor(float screenY) {
+                if (uHomeUseBlur == 1) {
+                    float mediaAspect = uVideoSize.x / max(uVideoSize.y, 1.0);
+                    float screenAspect = uResolution.x / max(uResolution.y, 1.0);
+                    vec2 homeBlurUv = vec2(vTexCoord.x, screenY);
+
+                    if (screenAspect < mediaAspect) {
+                        float scaleX = screenAspect / mediaAspect;
+                        homeBlurUv.x = (homeBlurUv.x - 0.5) * scaleX + 0.5;
+                    } else {
+                        float scaleY = mediaAspect / screenAspect;
+                        homeBlurUv.y = (homeBlurUv.y - 0.5) * scaleY + 0.5;
+                    }
+
+                    return sampleHomeDiffusion(homeBlurUv);
+                } else {
+                    return sampleSharpenedStatic(sHomeTexture, uHomeSize, screenY);
+                }
+            }
+
             void main() {
                 float screenY = 1.0 - vTexCoord.y;
 
                 if (uHomeAlpha >= 0.999) {
-                    gl_FragColor = sampleSharpenedStatic(sHomeTexture, uHomeSize, screenY);
+                    gl_FragColor = computeHomeLayerColor(screenY);
                     return;
                 }
 
@@ -1616,16 +1754,21 @@ class BlurVideoWallpaperService : WallpaperService() {
                 if (uMode == 0) {
                     lockColor = sampleSharpenedStatic(sStaticTexture, uVideoSize, screenY);
                 } else {
-                    float topOffset = uTopOffset;
-                    float fixedBoxAspect = 3.0 / 4.0;
-                    float targetHeightRatio = (uResolution.x / fixedBoxAspect) / max(uResolution.y, 1.0);
-                    targetHeightRatio = clamp(targetHeightRatio, 0.45, 0.68);
+                    float baseBoxAspect = 3.0 / 4.0;
+                    float baseHeightRatio = (uResolution.x / baseBoxAspect) / max(uResolution.y, 1.0);
+                    baseHeightRatio = clamp(baseHeightRatio, 0.45, 0.68);
+
+                    float targetHeightRatio = mix(baseHeightRatio, 0.95, uCoverExpansion);
+                    float maxAllowedTop = max(0.025, 1.0 - targetHeightRatio - 0.025);
+                    float topOffset = mix(min(uTopOffset, maxAllowedTop), 0.025, uCoverExpansion);
+
+                    float currentBoxAspect = uResolution.x / max(uResolution.y * targetHeightRatio, 1.0);
 
                     float scaleX = 1.0;
                     if (!STRETCH_1X1_VERTICALLY) {
                         float mediaAspect = uVideoSize.x / max(uVideoSize.y, 1.0);
-                        if (fixedBoxAspect < mediaAspect) {
-                            scaleX = fixedBoxAspect / mediaAspect;
+                        if (currentBoxAspect < mediaAspect) {
+                            scaleX = currentBoxAspect / mediaAspect;
                         }
                     }
 
@@ -1639,18 +1782,21 @@ class BlurVideoWallpaperService : WallpaperService() {
                     vec4 sharpColor = sampleSharpMedia(sharpUv);
                     vec4 silkyBlur = sampleSilkyBlur(mirrorUv);
 
+                    float fadeBand = mix(0.11, 0.04, uCoverExpansion);
+                    float bottomFadeBand = mix(0.15, 0.05, uCoverExpansion);
+
                     float topBlurMask = 0.0;
-                    if (topOffset > 0.01) {
-                        topBlurMask = 1.0 - smoothstep(topOffset - 0.01, topOffset + (targetHeightRatio * 0.11), screenY);
+                    if (topOffset > 0.005) {
+                        topBlurMask = 1.0 - smoothstep(topOffset - 0.01, topOffset + (targetHeightRatio * fadeBand), screenY);
                     }
-                    float bottomBlurMask = smoothstep(bottomLimit - (targetHeightRatio * 0.15), bottomLimit + 0.01, screenY);
+                    float bottomBlurMask = smoothstep(bottomLimit - (targetHeightRatio * bottomFadeBand), bottomLimit + 0.01, screenY);
 
                     float totalBlurFactor = clamp(topBlurMask + bottomBlurMask, 0.0, 1.0);
                     lockColor = mix(sharpColor, silkyBlur, totalBlurFactor);
                 }
 
                 if (uHomeAlpha > 0.001) {
-                    vec4 homeColor = sampleSharpenedStatic(sHomeTexture, uHomeSize, screenY);
+                    vec4 homeColor = computeHomeLayerColor(screenY);
                     gl_FragColor = mix(lockColor, homeColor, uHomeAlpha);
                 } else {
                     gl_FragColor = lockColor;

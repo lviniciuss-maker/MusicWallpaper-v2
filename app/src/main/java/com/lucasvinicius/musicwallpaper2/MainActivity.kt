@@ -27,6 +27,7 @@ import android.media.MediaMetadata
 import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.Editable
@@ -75,8 +76,13 @@ class MainActivity : AppCompatActivity() {
     private var homeStatusText: TextView? = null
     private var homePreviewImageView: ImageView? = null
 
+    private var homeBlurPhotoContainer: LinearLayout? = null
+    private var homeBlurStatusText: TextView? = null
+    private var homeBlurPreviewImageView: ImageView? = null
+
     private val pickLockscreenImageRequest = 1001
     private val pickHomeImageRequest = 1002
+    private val pickHomeBlurImageRequest = 1003
 
     private val githubOwner = "lviniciuss-maker"
     private val githubRepo = "MusicWallpaper-v2"
@@ -106,8 +112,16 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("wallpaper_prefs", MODE_PRIVATE)
         val savedOffsetPercent = prefs.getInt("top_offset_percent", 20).coerceIn(0, 40)
         val savedBlurPercent = prefs.getInt("blur_strength_percent", 100).coerceIn(60, 100)
+        val savedExpansionPercent = prefs.getInt("cover_expansion_percent", 0).coerceIn(0, 100)
         val savedOfflineOnly = prefs.getBoolean("offline_only_mode", false)
-        val savedLockscreenOnly = prefs.getBoolean("lockscreen_only_mode", false)
+        val savedKeepLastCover = prefs.getBoolean("keep_last_cover_on_pause", false)
+        val savedHomeUseAlbumBlur = prefs.getBoolean("home_use_album_blur", false)
+        var savedLockscreenOnly = prefs.getBoolean("lockscreen_only_mode", false)
+        if (savedHomeUseAlbumBlur && savedLockscreenOnly) {
+            savedLockscreenOnly = false
+            prefs.edit().putBoolean("lockscreen_only_mode", false).apply()
+        }
+        val savedPixelColors = prefs.getBoolean("pixel_dynamic_colors", false)
         val currentAppVersion = getInstalledVersionName()
 
         val scrollView = ScrollView(this).apply {
@@ -117,7 +131,7 @@ class MainActivity : AppCompatActivity() {
 
         val rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(28), dp(20), dp(36))
+            setPadding(dp(20), dp(56), dp(20), dp(36))
         }
 
         val titleText = TextView(this).apply {
@@ -138,7 +152,7 @@ class MainActivity : AppCompatActivity() {
         rootLayout.addView(subtitleText)
 
         // =========================================================================
-        // CARTÃO 1: PERMISSÃO + EXCEÇÕES + MODO OFFLINE + PAINEL DE DIAGNÓSTICO
+        // CARTÃO 1: PERMISSÃO + EXCEÇÕES + MODO OFFLINE + PIXEL 7+ + DIAGNÓSTICO
         // =========================================================================
         val cardPerm = createCardLayout()
 
@@ -185,58 +199,15 @@ class MainActivity : AppCompatActivity() {
         }
         updateExcludedButtonCount()
 
-        val localOnlyRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#202431"))
-                cornerRadius = dp(12).toFloat()
-            }
-        }
-
-        val localOnlyTextCol = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginEnd = dp(10)
-            }
-        }
-
-        val localOnlyTitleTv = TextView(this).apply {
-            text = getString(R.string.chk_local_only_title)
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-        }
-
-        val localOnlyDescTv = TextView(this).apply {
-            text = getString(R.string.chk_local_only_desc)
-            setTextColor(Color.parseColor("#9AA0B4"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setPadding(0, dp(2), 0, 0)
-        }
-
-        localOnlyTextCol.addView(localOnlyTitleTv)
-        localOnlyTextCol.addView(localOnlyDescTv)
-
-        val chkLocalOnly = CheckBox(this).apply {
-            isChecked = savedOfflineOnly
-            buttonTintList = ColorStateList.valueOf(Color.parseColor("#8AB4F8"))
-            isClickable = false
-            isFocusable = false
-        }
-
-        localOnlyRow.addView(localOnlyTextCol)
-        localOnlyRow.addView(chkLocalOnly)
-
-        localOnlyRow.setOnClickListener {
-            val newState = !chkLocalOnly.isChecked
-            chkLocalOnly.isChecked = newState
+        val localOnlyRow = createToggleRow(
+            title = getString(R.string.chk_local_only_title),
+            desc = getString(R.string.chk_local_only_desc),
+            initialChecked = savedOfflineOnly
+        ) { newState ->
             prefs.edit().putBoolean("offline_only_mode", newState).apply()
             notifySettingsChanged()
         }
 
-        // Caixa de Diagnóstico de Metadados (Exibe exatamente o que o player está enviando)
         val diagBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(10), dp(12), dp(10))
@@ -283,13 +254,27 @@ class MainActivity : AppCompatActivity() {
         cardPerm.addView(btnExcludedApps)
         cardPerm.addView(createSpacer(12))
         cardPerm.addView(localOnlyRow)
+
+        if (isGooglePixel7OrNewer()) {
+            val pixelColorsRow = createToggleRow(
+                title = getString(R.string.chk_pixel_colors_title),
+                desc = getString(R.string.chk_pixel_colors_desc),
+                initialChecked = savedPixelColors
+            ) { newState ->
+                prefs.edit().putBoolean("pixel_dynamic_colors", newState).apply()
+                notifySettingsChanged()
+            }
+            cardPerm.addView(createSpacer(10))
+            cardPerm.addView(pixelColorsRow)
+        }
+
         cardPerm.addView(createSpacer(12))
         cardPerm.addView(diagBox)
         rootLayout.addView(cardPerm)
         rootLayout.addView(createSpacer(16))
 
         // =========================================================================
-        // CARTÃO 2: FOTOS DE ESPERA (TELA DE BLOQUEIO E TELA INICIAL SEPARADAS)
+        // CARTÃO 2: FOTOS DE ESPERA + MANTER CAPA AO PAUSAR + OPÇÕES DA TELA INICIAL
         // =========================================================================
         val cardPhoto = createCardLayout()
 
@@ -337,49 +322,114 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val lockscreenOnlyRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#202431"))
-                cornerRadius = dp(12).toFloat()
-            }
+        val keepLastCoverRow = createToggleRow(
+            title = getString(R.string.chk_keep_cover_title),
+            desc = getString(R.string.chk_keep_cover_desc),
+            initialChecked = savedKeepLastCover
+        ) { newState ->
+            prefs.edit().putBoolean("keep_last_cover_on_pause", newState).apply()
+            notifySettingsChanged()
         }
 
-        val lockscreenOnlyTextCol = LinearLayout(this).apply {
+        var lockscreenOnlyRowRef: LinearLayout? = null
+        var homeUseBlurRowRef: LinearLayout? = null
+
+        val lockscreenOnlyRow = createToggleRow(
+            title = getString(R.string.chk_lockscreen_only_title),
+            desc = getString(R.string.chk_lockscreen_only_desc),
+            initialChecked = savedLockscreenOnly
+        ) { newState ->
+            val editor = prefs.edit().putBoolean("lockscreen_only_mode", newState)
+            if (newState) {
+                editor.putBoolean("home_use_album_blur", false)
+                (homeUseBlurRowRef?.getChildAt(1) as? CheckBox)?.isChecked = false
+                homeBlurPhotoContainer?.visibility = View.GONE
+            }
+            editor.apply()
+            homePhotoContainer?.visibility = if (newState) View.VISIBLE else View.GONE
+            notifySettingsChanged()
+        }
+        lockscreenOnlyRowRef = lockscreenOnlyRow
+
+        val homeUseBlurRow = createToggleRow(
+            title = getString(R.string.chk_home_blur_title),
+            desc = getString(R.string.chk_home_blur_desc),
+            initialChecked = savedHomeUseAlbumBlur
+        ) { newState ->
+            val editor = prefs.edit().putBoolean("home_use_album_blur", newState)
+            if (newState) {
+                editor.putBoolean("lockscreen_only_mode", false)
+                (lockscreenOnlyRowRef?.getChildAt(1) as? CheckBox)?.isChecked = false
+                homePhotoContainer?.visibility = View.GONE
+            }
+            editor.apply()
+            homeBlurPhotoContainer?.visibility = if (newState) View.VISIBLE else View.GONE
+            notifySettingsChanged()
+        }
+        homeUseBlurRowRef = homeUseBlurRow
+
+        homeBlurPhotoContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                marginEnd = dp(10)
+            setPadding(dp(14), dp(14), dp(14), dp(14))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#141720"))
+                cornerRadius = dp(14).toFloat()
+                setStroke(dp(1), Color.parseColor("#262B3C"))
             }
+            visibility = if (savedHomeUseAlbumBlur) View.VISIBLE else View.GONE
         }
 
-        val lockscreenOnlyTitleTv = TextView(this).apply {
-            text = getString(R.string.chk_lockscreen_only_title)
-            setTextColor(Color.WHITE)
+        val homeBlurSectionTitle = TextView(this).apply {
+            text = getString(R.string.home_blur_photo_section_title)
+            setTextColor(Color.parseColor("#8AB4F8"))
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
         }
 
-        val lockscreenOnlyDescTv = TextView(this).apply {
-            text = getString(R.string.chk_lockscreen_only_desc)
-            setTextColor(Color.parseColor("#9AA0B4"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            setPadding(0, dp(2), 0, 0)
+        val homeBlurPhotoRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, dp(10), 0, dp(12))
         }
 
-        lockscreenOnlyTextCol.addView(lockscreenOnlyTitleTv)
-        lockscreenOnlyTextCol.addView(lockscreenOnlyDescTv)
-
-        val chkLockscreenOnly = CheckBox(this).apply {
-            isChecked = savedLockscreenOnly
-            buttonTintList = ColorStateList.valueOf(Color.parseColor("#8AB4F8"))
-            isClickable = false
-            isFocusable = false
+        homeBlurPreviewImageView = ImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(54), dp(84)).apply {
+                marginEnd = dp(16)
+            }
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#252936"))
+                cornerRadius = dp(10).toFloat()
+            }
+            clipToOutline = true
         }
 
-        lockscreenOnlyRow.addView(lockscreenOnlyTextCol)
-        lockscreenOnlyRow.addView(chkLockscreenOnly)
+        homeBlurStatusText = TextView(this).apply {
+            setTextColor(Color.parseColor("#D5D9E6"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+
+        homeBlurPhotoRow.addView(homeBlurPreviewImageView)
+        homeBlurPhotoRow.addView(homeBlurStatusText)
+
+        val btnPickHomeBlurImage = createSecondaryButton(getString(R.string.btn_pick_home_blur_photo)).apply {
+            setOnClickListener {
+                try {
+                    val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                        type = "image/*"
+                    }
+                    @Suppress("DEPRECATION")
+                    startActivityForResult(Intent.createChooser(intent, getString(R.string.chooser_title)), pickHomeBlurImageRequest)
+                } catch (_: Exception) {
+                    Toast.makeText(this@MainActivity, getString(R.string.toast_error_generic), Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        homeBlurPhotoContainer?.addView(homeBlurSectionTitle)
+        homeBlurPhotoContainer?.addView(homeBlurPhotoRow)
+        homeBlurPhotoContainer?.addView(btnPickHomeBlurImage)
 
         homePhotoContainer = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -444,27 +494,25 @@ class MainActivity : AppCompatActivity() {
         homePhotoContainer?.addView(homePhotoRow)
         homePhotoContainer?.addView(btnPickHomeImage)
 
-        lockscreenOnlyRow.setOnClickListener {
-            val newState = !chkLockscreenOnly.isChecked
-            chkLockscreenOnly.isChecked = newState
-            prefs.edit().putBoolean("lockscreen_only_mode", newState).apply()
-            homePhotoContainer?.visibility = if (newState) View.VISIBLE else View.GONE
-            notifySettingsChanged()
-        }
-
         cardPhoto.addView(photoTitle)
         cardPhoto.addView(photoDesc)
         cardPhoto.addView(photoRow)
         cardPhoto.addView(btnPickImage)
         cardPhoto.addView(createSpacer(12))
-        cardPhoto.addView(lockscreenOnlyRow)
+        cardPhoto.addView(keepLastCoverRow)
         cardPhoto.addView(createSpacer(10))
+        cardPhoto.addView(homeUseBlurRow)
+        cardPhoto.addView(createSpacer(8))
+        cardPhoto.addView(homeBlurPhotoContainer)
+        cardPhoto.addView(createSpacer(10))
+        cardPhoto.addView(lockscreenOnlyRow)
+        cardPhoto.addView(createSpacer(8))
         cardPhoto.addView(homePhotoContainer)
         rootLayout.addView(cardPhoto)
         rootLayout.addView(createSpacer(16))
 
         // =========================================================================
-        // CARTÃO 3: POSIÇÃO VERTICAL DA CAPA + INTENSIDADE DO BLUR (60% A 100%)
+        // CARTÃO 3: POSIÇÃO VERTICAL + INTENSIDADE DO BLUR + EXPANSÃO DA CAPA (95%)
         // =========================================================================
         val cardPos = createCardLayout()
 
@@ -510,7 +558,7 @@ class MainActivity : AppCompatActivity() {
             progress = (savedBlurPercent - 60).coerceIn(0, 40)
             progressTintList = ColorStateList.valueOf(Color.parseColor("#8AB4F8"))
             thumbTintList = ColorStateList.valueOf(Color.parseColor("#8AB4F8"))
-            setPadding(dp(4), dp(4), dp(4), dp(16))
+            setPadding(dp(4), dp(4), dp(4), dp(14))
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                     val actualPercent = 60 + progress
@@ -525,13 +573,42 @@ class MainActivity : AppCompatActivity() {
             })
         }
 
+        val expandLabel = TextView(this).apply {
+            setTextColor(Color.parseColor("#8AB4F8"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, dp(6), 0, dp(8))
+            text = getString(R.string.expand_label_format, savedExpansionPercent)
+        }
+
+        val seekBarExpand = SeekBar(this).apply {
+            max = 100
+            progress = savedExpansionPercent
+            progressTintList = ColorStateList.valueOf(Color.parseColor("#8AB4F8"))
+            thumbTintList = ColorStateList.valueOf(Color.parseColor("#8AB4F8"))
+            setPadding(dp(4), dp(4), dp(4), dp(16))
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    expandLabel.text = getString(R.string.expand_label_format, progress)
+                    if (fromUser) {
+                        prefs.edit().putInt("cover_expansion_percent", progress).apply()
+                        notifySettingsChanged()
+                    }
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+        }
+
         val btnResetOffset = createSecondaryButton(getString(R.string.btn_reset_pos)).apply {
             setOnClickListener {
                 seekBarPos.progress = 20
                 seekBarBlur.progress = 40
+                seekBarExpand.progress = 0
                 prefs.edit()
                     .putInt("top_offset_percent", 20)
                     .putInt("blur_strength_percent", 100)
+                    .putInt("cover_expansion_percent", 0)
                     .apply()
                 notifySettingsChanged()
             }
@@ -542,6 +619,8 @@ class MainActivity : AppCompatActivity() {
         cardPos.addView(seekBarPos)
         cardPos.addView(blurLabel)
         cardPos.addView(seekBarBlur)
+        cardPos.addView(expandLabel)
+        cardPos.addView(seekBarExpand)
         cardPos.addView(btnResetOffset)
         rootLayout.addView(cardPos)
         rootLayout.addView(createSpacer(24))
@@ -579,7 +658,7 @@ class MainActivity : AppCompatActivity() {
         rootLayout.addView(createSpacer(12))
 
         // =========================================================================
-        // BOTÃO DE VERIFICAR ATUALIZAÇÕES NO GITHUB
+        // BOTÃO DE VERIFICAR ATUALIZAÇÕES NO GITHUB + BOTÃO FAQ
         // =========================================================================
         val btnCheckUpdate = createSecondaryButton(getString(R.string.btn_check_updates, currentAppVersion)).apply {
             setOnClickListener {
@@ -587,6 +666,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
         rootLayout.addView(btnCheckUpdate)
+        rootLayout.addView(createSpacer(10))
+
+        val btnFaq = createSecondaryButton(getString(R.string.btn_faq)).apply {
+            setOnClickListener {
+                showFaqDialog()
+            }
+        }
+        rootLayout.addView(btnFaq)
 
         scrollView.addView(rootLayout)
         setContentView(scrollView)
@@ -596,6 +683,191 @@ class MainActivity : AppCompatActivity() {
         updateDiagnosticUI()
 
         checkForGitHubUpdates(isManualCheck = false)
+    }
+
+    private fun showFaqDialog() {
+        val faqItems = listOf(
+            Pair(getString(R.string.faq_q1), getString(R.string.faq_a1)),
+            Pair(getString(R.string.faq_q2), getString(R.string.faq_a2)),
+            Pair(getString(R.string.faq_q3), getString(R.string.faq_a3)),
+            Pair(getString(R.string.faq_q4), getString(R.string.faq_a4)),
+            Pair(getString(R.string.faq_q5), getString(R.string.faq_a5)),
+            Pair(getString(R.string.faq_q6), getString(R.string.faq_a6)),
+            Pair(getString(R.string.faq_q7), getString(R.string.faq_a7)),
+            Pair(getString(R.string.faq_q8), getString(R.string.faq_a8))
+        )
+
+        val outerContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(18), dp(20), dp(18), dp(8))
+        }
+
+        val titleTv = TextView(this).apply {
+            text = getString(R.string.faq_dialog_title)
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setPadding(dp(2), 0, dp(2), dp(12))
+        }
+
+        val scroll = ScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(440)
+            )
+        }
+
+        val listContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+
+        faqItems.forEachIndexed { index, (question, answer) ->
+            val itemCard = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+                background = GradientDrawable().apply {
+                    setColor(Color.parseColor("#13161F"))
+                    cornerRadius = dp(12).toFloat()
+                    setStroke(dp(1), Color.parseColor("#252B3D"))
+                }
+            }
+
+            val qTv = TextView(this).apply {
+                text = question
+                setTextColor(Color.parseColor("#8AB4F8"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                setPadding(0, 0, 0, dp(6))
+            }
+
+            val aTv = TextView(this).apply {
+                text = answer
+                setTextColor(Color.parseColor("#D5D9E6"))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+                setLineSpacing(dp(2).toFloat(), 1.12f)
+                setTextIsSelectable(true)
+            }
+
+            itemCard.addView(qTv)
+            itemCard.addView(aTv)
+
+            // Botão de cópia rápida para os comandos ADB no item 4
+            if (index == 3) {
+                val btnCopyAdb = Button(this).apply {
+                    text = getString(R.string.btn_copy_adb)
+                    isAllCaps = false
+                    setTextColor(Color.parseColor("#8AB4F8"))
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+                    background = GradientDrawable().apply {
+                        setColor(Color.parseColor("#1E2433"))
+                        cornerRadius = dp(10).toFloat()
+                        setStroke(dp(1), Color.parseColor("#33415C"))
+                    }
+                    setPadding(dp(12), dp(8), dp(12), dp(8))
+                    layoutParams = LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        topMargin = dp(10)
+                    }
+                    setOnClickListener {
+                        val adbCommands = "adb shell appops set com.lucasvinicius.musicwallpaper2 ACCESS_RESTRICTED_SETTINGS allow\n" +
+                                "adb shell cmd notification allow_listener com.lucasvinicius.musicwallpaper2/com.lucasvinicius.musicwallpaper2.MusicNotificationListener"
+                        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("MusicWallpaper ADB", adbCommands))
+                        Toast.makeText(this@MainActivity, getString(R.string.toast_adb_copied), Toast.LENGTH_SHORT).show()
+                    }
+                }
+                itemCard.addView(btnCopyAdb)
+            }
+
+            listContainer.addView(itemCard)
+            if (index < faqItems.lastIndex) {
+                listContainer.addView(createSpacer(10))
+            }
+        }
+
+        scroll.addView(listContainer)
+        outerContainer.addView(titleTv)
+        outerContainer.addView(scroll)
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(outerContainer)
+            .setPositiveButton(getString(R.string.btn_done)) { d, _ -> d.dismiss() }
+            .create()
+
+        dialog.show()
+        styleDarkDialog(dialog)
+    }
+
+    private fun isGooglePixel7OrNewer(): Boolean {
+        val isGoogle = Build.BRAND.equals("google", ignoreCase = true) ||
+                Build.MANUFACTURER.equals("google", ignoreCase = true)
+        if (!isGoogle) return false
+        val model = Build.MODEL?.lowercase() ?: ""
+        if (!model.contains("pixel")) return false
+        val numMatch = Regex("""pixel\s*(\d+)""").find(model)?.groupValues?.get(1)?.toIntOrNull()
+        if (numMatch != null) return numMatch >= 7
+        return model.contains("fold") || model.contains("tablet")
+    }
+
+    private fun createToggleRow(
+        title: String,
+        desc: String,
+        initialChecked: Boolean,
+        onToggle: (Boolean) -> Unit
+    ): LinearLayout {
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#202431"))
+                cornerRadius = dp(12).toFloat()
+            }
+        }
+
+        val textCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = dp(10)
+            }
+        }
+
+        val titleTv = TextView(this).apply {
+            text = title
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        }
+
+        val descTv = TextView(this).apply {
+            text = desc
+            setTextColor(Color.parseColor("#9AA0B4"))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setPadding(0, dp(2), 0, 0)
+        }
+
+        textCol.addView(titleTv)
+        textCol.addView(descTv)
+
+        val chk = CheckBox(this).apply {
+            isChecked = initialChecked
+            buttonTintList = ColorStateList.valueOf(Color.parseColor("#8AB4F8"))
+            isClickable = false
+            isFocusable = false
+        }
+
+        row.addView(textCol)
+        row.addView(chk)
+
+        row.setOnClickListener {
+            val newState = !chk.isChecked
+            chk.isChecked = newState
+            onToggle(newState)
+        }
+
+        return row
     }
 
     override fun onStart() {
@@ -613,7 +885,6 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Throwable) {}
     }
 
-    // Atualiza o painel de diagnóstico com os metadados salvos pelo serviço (ou inspeciona a sessão ativa ao vivo)
     private fun updateDiagnosticUI() {
         val prefs = getSharedPreferences("wallpaper_prefs", MODE_PRIVATE)
         var pkg = prefs.getString("debug_last_pkg", "") ?: ""
@@ -625,7 +896,6 @@ class MainActivity : AppCompatActivity() {
         var parsedTitle = prefs.getString("debug_parsed_title", "") ?: ""
         var resultStatus = prefs.getString("debug_result_status", "") ?: ""
 
-        // Caso o usuário ainda não tenha ativado o Live Wallpaper mas esteja tocando música, lê direto da sessão ativa
         if (isNotificationListenerEnabled()) {
             try {
                 val excluded = prefs.getStringSet("excluded_packages", emptySet()) ?: emptySet()
@@ -878,7 +1148,7 @@ class MainActivity : AppCompatActivity() {
         return false
     }
 
-    private fun showCropDialogForUri(uri: Uri, isHomeWallpaper: Boolean) {
+    private fun showCropDialogForUri(uri: Uri, targetFileName: String) {
         thread {
             val previewBitmap = loadHighResBitmapCorrectOrientation(uri, maxAllowedDim = 4096)
             if (previewBitmap == null) {
@@ -944,7 +1214,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     .setPositiveButton(getString(R.string.btn_save_crop)) { d, _ ->
                         val normRect = cropView.getNormalizedCropRect()
-                        saveLosslessCroppedWallpaper(uri, previewBitmap, normRect, isHomeWallpaper)
+                        saveLosslessCroppedWallpaper(uri, previewBitmap, normRect, targetFileName)
                         d.dismiss()
                     }
                     .create()
@@ -1144,7 +1414,7 @@ class MainActivity : AppCompatActivity() {
         uri: Uri,
         fallbackPreview: Bitmap,
         normRect: RectF,
-        isHomeWallpaper: Boolean
+        targetFileName: String
     ) {
         thread {
             try {
@@ -1169,17 +1439,12 @@ class MainActivity : AppCompatActivity() {
                     exactSubBitmap
                 }
 
-                if (isHomeWallpaper) {
-                    val homePngFile = File(filesDir, "home_wallpaper.png")
-                    FileOutputStream(homePngFile).use { out ->
-                        finalBitmapToSave.compress(Bitmap.CompressFormat.PNG, 100, out)
-                    }
-                } else {
+                if (targetFileName == "default_wallpaper.png") {
                     File(filesDir, "default_wallpaper.jpg").delete()
-                    val lockPngFile = File(filesDir, "default_wallpaper.png")
-                    FileOutputStream(lockPngFile).use { out ->
-                        finalBitmapToSave.compress(Bitmap.CompressFormat.PNG, 100, out)
-                    }
+                }
+                val destFile = File(filesDir, targetFileName)
+                FileOutputStream(destFile).use { out ->
+                    finalBitmapToSave.compress(Bitmap.CompressFormat.PNG, 100, out)
                 }
 
                 runOnUiThread {
@@ -1459,8 +1724,9 @@ class MainActivity : AppCompatActivity() {
         if (resultCode == Activity.RESULT_OK) {
             val uri = data?.data ?: return
             when (requestCode) {
-                pickLockscreenImageRequest -> showCropDialogForUri(uri, isHomeWallpaper = false)
-                pickHomeImageRequest -> showCropDialogForUri(uri, isHomeWallpaper = true)
+                pickLockscreenImageRequest -> showCropDialogForUri(uri, "default_wallpaper.png")
+                pickHomeImageRequest -> showCropDialogForUri(uri, "home_wallpaper.png")
+                pickHomeBlurImageRequest -> showCropDialogForUri(uri, "home_blur_wallpaper.png")
             }
         }
     }
@@ -1482,6 +1748,23 @@ class MainActivity : AppCompatActivity() {
         } else {
             statusText?.text = getString(R.string.status_photo_none)
             previewImageView?.setImageDrawable(null)
+        }
+
+        val homeBlurPngFile = File(filesDir, "home_blur_wallpaper.png")
+        if (homeBlurPngFile.exists()) {
+            homeBlurStatusText?.text = getString(R.string.status_home_blur_photo_ok)
+            val thumbOpts = BitmapFactory.Options().apply { inSampleSize = 4 }
+            val thumb = BitmapFactory.decodeFile(homeBlurPngFile.absolutePath, thumbOpts)
+            homeBlurPreviewImageView?.setImageBitmap(thumb)
+        } else {
+            homeBlurStatusText?.text = getString(R.string.status_home_photo_none)
+            if (activeLockFile != null) {
+                val thumbOpts = BitmapFactory.Options().apply { inSampleSize = 4 }
+                val thumb = BitmapFactory.decodeFile(activeLockFile.absolutePath, thumbOpts)
+                homeBlurPreviewImageView?.setImageBitmap(thumb)
+            } else {
+                homeBlurPreviewImageView?.setImageDrawable(null)
+            }
         }
 
         val homePngFile = File(filesDir, "home_wallpaper.png")

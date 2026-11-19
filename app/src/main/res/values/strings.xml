@@ -19,6 +19,9 @@
     <string name="chk_local_only_title">Use notification artwork only (Offline Mode)</string>
     <string name="chk_local_only_desc">Skips online animated/iTunes search and uses the exact cover embedded in your media player notification.</string>
 
+    <string name="chk_pixel_colors_title">Dynamic System Colors (Pixel 7+ Exclusive)</string>
+    <string name="chk_pixel_colors_desc">Extracts Material You colors from the album cover only while on the Lockscreen (60s cooldown to protect CPU).</string>
+
     <string name="diag_box_title">🔍 Last Detected Media (Tap to copy)</string>
     <string name="diag_box_empty">No active music detected yet. Play a song on your media player to inspect its metadata.</string>
     <string name="toast_diag_copied">Diagnostic metadata copied to clipboard!</string>
@@ -31,9 +34,17 @@
     <string name="chooser_title">Select a wallpaper photo</string>
     <string name="toast_photo_saved">Wallpaper photo saved successfully!</string>
 
+    <string name="chk_keep_cover_title">Keep last album cover when paused</string>
+    <string name="chk_keep_cover_desc">Ignores the standby wallpaper when music stops and keeps the last animated or static cover active on screen.</string>
+
     <string name="chk_lockscreen_only_title">Show music artwork on Lockscreen only</string>
-    <string name="chk_lockscreen_only_desc">Select \"Home and lock screens\" when applying. Music artwork will only appear on the Lockscreen, while your Home screen stays static.</string>
-    <string name="home_photo_section_title">Home Screen Static Wallpaper</string>
+    <string name="chk_lockscreen_only_desc">Use only if your device doesn\'t allow applying MusicWallpaper to the Lockscreen alone. Pick a photo below and apply to \"Home and lock screens\".</string>
+    <string name="home_photo_section_title">Home Screen Appearance</string>
+    <string name="chk_home_blur_title">Use diffused album blur on Home Screen</string>
+    <string name="chk_home_blur_desc">Fills your Home Screen with a soft, darkened Gaussian blur of the current album cover for clean icon readability.</string>
+    <string name="home_blur_photo_section_title">Home Screen Photo (when music stops)</string>
+    <string name="btn_pick_home_blur_photo">Choose Home Screen Standby Photo</string>
+    <string name="status_home_blur_photo_ok">✅ Custom home standby photo active</string>
     <string name="btn_pick_home_photo">Choose Home Screen Photo</string>
     <string name="status_home_photo_ok">✅ Custom home screen photo active</string>
     <string name="status_home_photo_none">ℹ️ Using lockscreen standby photo as fallback</string>
@@ -41,7 +52,8 @@
     <string name="card_pos_title">3. Artwork &amp; Blur Adjustments</string>
     <string name="pos_label_format">Vertical Position (from top): %1$d%%</string>
     <string name="blur_label_format">Blur Intensity: %1$d%%</string>
-    <string name="btn_reset_pos">Reset Adjustments (20% Pos | 100% Blur)</string>
+    <string name="expand_label_format">Cover Expansion (up to 95%% screen): %1$d%%</string>
+    <string name="btn_reset_pos">Reset Adjustments (20% Pos | 100% Blur | 0% Exp)</string>
 
     <string name="btn_activate_wallpaper">Activate Live Wallpaper</string>
     <string name="toast_error_generic">Could not open system screen</string>
@@ -58,4 +70,33 @@
     <string name="btn_later">Later</string>
     <string name="toast_up_to_date">You are already using the latest version (v%1$s)!</string>
     <string name="toast_update_check_error">Could not check GitHub updates right now.</string>
+
+    <string name="btn_faq">❓ Frequently Asked Questions (FAQ)</string>
+    <string name="faq_dialog_title">❓ Frequently Asked Questions</string>
+    <string name="btn_copy_adb">📋 Copy ADB Commands</string>
+    <string name="toast_adb_copied">ADB commands copied to clipboard!</string>
+
+    <string name="faq_q1">1. How do I keep the last album cover on my Lockscreen without keeping it on my Home Screen?</string>
+    <string name="faq_a1">Enable both \"Keep last album cover when paused\" and \"Show music artwork on Lockscreen only\". Then pick your preferred static Home Screen photo and apply MusicWallpaper to \"Home and lock screens\". The last cover stays active only on the Lockscreen even after music stops.</string>
+
+    <string name="faq_q2">2. Why can\'t I enable \"Use diffused album blur on Home Screen\" and \"Show music artwork on Lockscreen only\" at the same time?</string>
+    <string name="faq_a2">Both toggles control different Home Screen behaviors while music is playing:\n• Diffused album blur: fills your Home Screen with a soft blur of the current album and returns to its standby photo when music stops.\n• Lockscreen only: always keeps your chosen static photo on the Home Screen.\nEach option has its own independent photo picker.</string>
+
+    <string name="faq_q3">3. My device already lets me apply Live Wallpapers to the Lockscreen only. Do I need \"Show music artwork on Lockscreen only\"?</string>
+    <string name="faq_a3">No. That option is only for devices/ROMs that don\'t allow applying Live Wallpapers exclusively to the Lockscreen. If your phone lets you set it on the Lockscreen alone, leave this toggle off.</string>
+
+    <string name="faq_q4">4. Android blocked Notification Access with \"Restricted setting\". How do I unlock it?</string>
+    <string name="faq_a4">On Android 13+, sideloaded APKs have Notification Access restricted by default.\n\nOption A — On your phone:\n1. Tap \"Configure Permission\" and select MusicWallpaper (tap OK on the warning).\n2. Open App Info, tap the 3 dots (⋮) in the top-right corner, and select \"Allow restricted settings\".\n3. Return and enable MusicWallpaper normally.\n\nOption B — Via ADB (PC or Shizuku/Termux):\nadb shell appops set com.lucasvinicius.musicwallpaper2 ACCESS_RESTRICTED_SETTINGS allow\n\nadb shell cmd notification allow_listener com.lucasvinicius.musicwallpaper2/com.lucasvinicius.musicwallpaper2.MusicNotificationListener</string>
+
+    <string name="faq_q5">5. How do I stop YouTube, Reels, or browsers from changing my wallpaper?</string>
+    <string name="faq_a5">In Card 1 (Music Detection), tap \"Ignored Apps\" and check any video players, social media apps, or browsers you don\'t want MusicWallpaper to track.</string>
+
+    <string name="faq_q6">6. Why are some songs static or take a few seconds to update on slow Wi-Fi?</string>
+    <string name="faq_a6">Not all albums have official animated artwork in Apple Music. When unavailable, the app automatically downloads the 1000x1000 static cover or uses your player\'s notification artwork. On slow connections, the previous cover stays smoothly on screen while an automatic 4-second retry loads the new artwork.</string>
+
+    <string name="faq_q7">7. Does keeping the animated cover on pause or using Home Screen Diffusion drain a lot of battery?</string>
+    <string name="faq_a7">No. Both the video decoder (ExoPlayer) and GPU blur passes automatically pause whenever the screen turns off. On the Home Screen with Diffusion enabled, the crossfade lasts 260ms and video playback pauses right after, keeping battery usage virtually zero.</string>
+
+    <string name="faq_q8">8. Why doesn\'t \"Dynamic System Colors (Material You)\" show up on my phone?</string>
+    <string name="faq_a8">This feature is exclusively enabled on Google Pixel 7 or newer devices, as it relies on Pixel\'s native Material You lockscreen color engine (with a strict 60-second cooldown to protect CPU performance).</string>
 </resources>
