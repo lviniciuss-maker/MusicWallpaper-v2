@@ -154,7 +154,9 @@ class BlurVideoWallpaperService : WallpaperService() {
             applyNoMusicStateNow()
         }
 
-        private var secondCheckRunnable: Runnable? = null
+        // Checagens agendadas em 2s e 4s após troca de faixa
+        private var twoSecCheckRunnable: Runnable? = null
+        private var fourSecCheckRunnable: Runnable? = null
 
         private val activePollRunnable = object : Runnable {
             override fun run() {
@@ -259,7 +261,7 @@ class BlurVideoWallpaperService : WallpaperService() {
             isEngineVisible = false
             mainHandler.post {
                 homeFadeAnimator?.cancel()
-                secondCheckRunnable?.let { mainHandler.removeCallbacks(it) }
+                cancelDelayedVerifications()
                 pendingColorNotifyRunnable?.let { mainHandler.removeCallbacks(it) }
                 mainHandler.removeCallbacks(activePollRunnable)
                 mainHandler.removeCallbacks(noMusicDelayRunnable)
@@ -549,26 +551,52 @@ class BlurVideoWallpaperService : WallpaperService() {
             }
         }
 
-        private fun scheduleDelayedSecondVerification(
+        private fun cancelDelayedVerifications() {
+            twoSecCheckRunnable?.let { mainHandler.removeCallbacks(it) }
+            twoSecCheckRunnable = null
+            fourSecCheckRunnable?.let { mainHandler.removeCallbacks(it) }
+            fourSecCheckRunnable = null
+        }
+
+        private fun scheduleDelayedVerifications(
             trackKey: String,
             artist: String,
             album: String,
             title: String,
             generation: Int
         ) {
-            secondCheckRunnable?.let { mainHandler.removeCallbacks(it) }
-            val runnable = Runnable {
+            cancelDelayedVerifications()
+
+            // Checagem intermediária em 2s: captura capas atrasadas da notificação e retenta rede rápida sem derrubar a capa atual
+            val check2s = Runnable {
+                twoSecCheckRunnable = null
                 if (generation != searchGeneration || currentTrackKey != trackKey) return@Runnable
+                if (isUsingOnlineCover) return@Runnable
+                checkCurrentMusic()
+                if (!offlineOnlyMode && !isUsingOnlineCover && !isSearchInProgress) {
+                    Log.d("BlurWallpaper", "Checagem de 2s: Reiniciando busca online para $title")
+                    fetchCoverForTrack(trackKey, artist, album, title, generation, retryStage = 1)
+                }
+            }
+
+            // Checagem final em 4s: rede de segurança para Wi-Fi lento e fallback final se nada carregou
+            val check4s = Runnable {
+                fourSecCheckRunnable = null
+                if (generation != searchGeneration || currentTrackKey != trackKey) return@Runnable
+                if (isUsingOnlineCover) return@Runnable
                 checkCurrentMusic()
                 if (!offlineOnlyMode && !isUsingOnlineCover && !isSearchInProgress) {
                     Log.d("BlurWallpaper", "Checagem de 4s: Reiniciando busca online para $title (Wi-Fi lento)")
-                    fetchCoverForTrack(trackKey, artist, album, title, generation, isRetryAttempt = true)
+                    fetchCoverForTrack(trackKey, artist, album, title, generation, retryStage = 2)
                 } else if (offlineOnlyMode && !hasUpdatedCoverForCurrentTrack) {
                     showDefaultWallpaper()
                 }
             }
-            secondCheckRunnable = runnable
-            mainHandler.postDelayed(runnable, 4000L)
+
+            twoSecCheckRunnable = check2s
+            fourSecCheckRunnable = check4s
+            mainHandler.postDelayed(check2s, 2000L)
+            mainHandler.postDelayed(check4s, 4000L)
         }
 
         private fun checkCurrentMusic() {
@@ -650,6 +678,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                     val currentGen = searchGeneration
                     isUsingOnlineCover = false
                     hasUpdatedCoverForCurrentTrack = false
+                    cancelDelayedVerifications()
 
                     if (previousTrackKey.isNotEmpty() && lastNotificationBitmapSignature != 0) {
                         stalePreviousTrackSignature = lastNotificationBitmapSignature
@@ -683,7 +712,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                             hasUpdatedCoverForCurrentTrack = true
                             uploadStaticBitmapToOpenGL(safeFallbackBitmap, isDefaultFullWallpaper = false)
                         }
-                        scheduleDelayedSecondVerification(newKey, artist, album, title, currentGen)
+                        scheduleDelayedVerifications(newKey, artist, album, title, currentGen)
                         return
                     }
 
@@ -707,8 +736,8 @@ class BlurVideoWallpaperService : WallpaperService() {
                         uploadStaticBitmapToOpenGL(safeFallbackBitmap, isDefaultFullWallpaper = false)
                     }
 
-                    fetchCoverForTrack(newKey, artist, album, title, currentGen, isRetryAttempt = false)
-                    scheduleDelayedSecondVerification(newKey, artist, album, title, currentGen)
+                    fetchCoverForTrack(newKey, artist, album, title, currentGen, retryStage = 0)
+                    scheduleDelayedVerifications(newKey, artist, album, title, currentGen)
                 } else {
                     if (safeFallbackBitmap != null && !isUsingOnlineCover && !isSearchInProgress) {
                         val isNoLongerStale = (stalePreviousTrackSignature == 0 || currentBmpSignature != stalePreviousTrackSignature)
@@ -760,7 +789,7 @@ class BlurVideoWallpaperService : WallpaperService() {
             if (keepLastCoverOnPause && (displayMode == 1 || displayMode == 2)) return
 
             if (currentTrackKey.isNotEmpty() || displayMode != 0) {
-                secondCheckRunnable?.let { mainHandler.removeCallbacks(it) }
+                cancelDelayedVerifications()
                 currentTrackKey = ""
                 currentPlayingM3u8Url = null
                 isUsingOnlineCover = false
@@ -945,7 +974,7 @@ class BlurVideoWallpaperService : WallpaperService() {
             album: String,
             title: String,
             generation: Int,
-            isRetryAttempt: Boolean = false
+            retryStage: Int = 0
         ) {
             isSearchInProgress = true
             thread {
@@ -957,7 +986,11 @@ class BlurVideoWallpaperService : WallpaperService() {
                     val encArtist = URLEncoder.encode(cleanArtist, "UTF-8")
 
                     var m3u8Found: String? = null
-                    var m3u8SourceLabel = if (isRetryAttempt) "Plan A (Retry 4s)" else "Plan A (3:4 API)"
+                    var m3u8SourceLabel = when (retryStage) {
+                        1 -> "Plan A (Retry 2s)"
+                        2 -> "Plan A (Retry 4s)"
+                        else -> "Plan A (3:4 API)"
+                    }
                     var itunesMatch: Triple<String, String, String>? = null
 
                     if (cleanAlbum.isNotEmpty()) {
@@ -999,7 +1032,11 @@ class BlurVideoWallpaperService : WallpaperService() {
                         if (collectionViewUrl.isNotEmpty()) {
                             m3u8Found = extractM3u8FromAppleMusicPage(collectionViewUrl)
                             if (m3u8Found != null) {
-                                m3u8SourceLabel = if (isRetryAttempt) "Plan B (Retry 4s)" else "Plan B (Apple Direct .m3u8)"
+                                m3u8SourceLabel = when (retryStage) {
+                                    1 -> "Plan B (Retry 2s)"
+                                    2 -> "Plan B (Retry 4s)"
+                                    else -> "Plan B (Apple Direct .m3u8)"
+                                }
                             }
                         }
                     }
@@ -1015,6 +1052,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                             if (generation != searchGeneration || offlineOnlyMode) return@post
                             isUsingOnlineCover = true
                             hasUpdatedCoverForCurrentTrack = true
+                            cancelDelayedVerifications()
                             saveAndBroadcastDebugMetadata(
                                 parsedArtist = cleanArtist,
                                 parsedAlbum = cleanAlbum,
@@ -1043,25 +1081,36 @@ class BlurVideoWallpaperService : WallpaperService() {
                             if (safeOnlineStatic != null) {
                                 isUsingOnlineCover = true
                                 hasUpdatedCoverForCurrentTrack = true
+                                cancelDelayedVerifications()
+                                val staticStatus = when (retryStage) {
+                                    1 -> "🖼️ Static (iTunes 1000x1000 - Retry 2s)"
+                                    2 -> "🖼️ Static (iTunes 1000x1000 - Retry 4s)"
+                                    else -> "🖼️ Static (iTunes 1000x1000)"
+                                }
                                 saveAndBroadcastDebugMetadata(
                                     parsedArtist = cleanArtist,
                                     parsedAlbum = cleanAlbum,
                                     parsedTitle = cleanTitle,
-                                    status = if (isRetryAttempt) "🖼️ Static (iTunes 1000x1000 - Retry 4s)" else "🖼️ Static (iTunes 1000x1000)"
+                                    status = staticStatus
                                 )
                                 updateCoverColorsForPixelLockscreen(safeOnlineStatic)
                                 uploadStaticBitmapToOpenGL(safeOnlineStatic, isDefaultFullWallpaper = false)
                             } else {
                                 isUsingOnlineCover = false
+                                val fallbackStatus = when (retryStage) {
+                                    1 -> "📱 Static (Notification Fallback - Verified 2s)"
+                                    2 -> "📱 Static (Notification Fallback - Verified 4s)"
+                                    else -> "📱 Static (Notification Fallback - Waiting 2s/4s check)"
+                                }
                                 saveAndBroadcastDebugMetadata(
                                     parsedArtist = cleanArtist,
                                     parsedAlbum = cleanAlbum,
                                     parsedTitle = cleanTitle,
-                                    status = if (isRetryAttempt) "📱 Static (Notification Fallback - Verified 4s)" else "📱 Static (Notification Fallback - Waiting 4s check)"
+                                    status = fallbackStatus
                                 )
                                 checkCurrentMusic()
 
-                                if (isRetryAttempt && !hasUpdatedCoverForCurrentTrack) {
+                                if (retryStage >= 2 && !hasUpdatedCoverForCurrentTrack) {
                                     showDefaultWallpaper()
                                 }
                             }
