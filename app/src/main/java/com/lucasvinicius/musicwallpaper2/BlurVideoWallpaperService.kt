@@ -398,7 +398,7 @@ class BlurVideoWallpaperService : WallpaperService() {
 
         private fun loadUserPreferences() {
             val prefs = getSharedPreferences("wallpaper_prefs", MODE_PRIVATE)
-            val percent = prefs.getInt("top_offset_percent", 20).coerceIn(0, 40)
+            val percent = prefs.getInt("top_offset_percent", 20).coerceIn(0, 60)
             userTopOffset = percent / 100f
 
             val blurPercent = prefs.getInt("blur_strength_percent", 100).coerceIn(60, 100)
@@ -1759,8 +1759,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                     baseHeightRatio = clamp(baseHeightRatio, 0.45, 0.68);
 
                     float targetHeightRatio = mix(baseHeightRatio, 0.95, uCoverExpansion);
-                    float maxAllowedTop = max(0.025, 1.0 - targetHeightRatio - 0.025);
-                    float topOffset = mix(min(uTopOffset, maxAllowedTop), 0.025, uCoverExpansion);
+                    float topOffset = mix(uTopOffset, 0.025, uCoverExpansion);
 
                     float currentBoxAspect = uResolution.x / max(uResolution.y * targetHeightRatio, 1.0);
 

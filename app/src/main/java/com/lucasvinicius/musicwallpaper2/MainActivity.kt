@@ -110,7 +110,7 @@ class MainActivity : AppCompatActivity() {
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
 
         val prefs = getSharedPreferences("wallpaper_prefs", MODE_PRIVATE)
-        val savedOffsetPercent = prefs.getInt("top_offset_percent", 20).coerceIn(0, 40)
+        val savedOffsetPercent = prefs.getInt("top_offset_percent", 20).coerceIn(0, 60)
         val savedBlurPercent = prefs.getInt("blur_strength_percent", 100).coerceIn(60, 100)
         val savedExpansionPercent = prefs.getInt("cover_expansion_percent", 0).coerceIn(0, 100)
         val savedOfflineOnly = prefs.getBoolean("offline_only_mode", false)
@@ -512,7 +512,7 @@ class MainActivity : AppCompatActivity() {
         rootLayout.addView(createSpacer(16))
 
         // =========================================================================
-        // CARTÃO 3: POSIÇÃO VERTICAL + INTENSIDADE DO BLUR + EXPANSÃO DA CAPA (95%)
+        // CARTÃO 3: POSIÇÃO VERTICAL (ATÉ 60%) + INTENSIDADE DO BLUR + EXPANSÃO (95%)
         // =========================================================================
         val cardPos = createCardLayout()
 
@@ -527,7 +527,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val seekBarPos = SeekBar(this).apply {
-            max = 40
+            max = 60
             progress = savedOffsetPercent
             progressTintList = ColorStateList.valueOf(Color.parseColor("#8AB4F8"))
             thumbTintList = ColorStateList.valueOf(Color.parseColor("#8AB4F8"))
@@ -751,7 +751,6 @@ class MainActivity : AppCompatActivity() {
             itemCard.addView(qTv)
             itemCard.addView(aTv)
 
-            // Botão de cópia rápida para os comandos ADB no item 4
             if (index == 3) {
                 val btnCopyAdb = Button(this).apply {
                     text = getString(R.string.btn_copy_adb)
