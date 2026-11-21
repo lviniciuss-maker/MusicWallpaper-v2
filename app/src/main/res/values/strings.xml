@@ -2,6 +2,11 @@
     <string name="app_name">MusicWallpaper</string>
     <string name="app_subtitle">Live Lockscreen Animated Artwork</string>
 
+    <string name="theme_selector_title">App Theme</string>
+    <string name="theme_system">System</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+
     <string name="card_perm_title">1. Music Detection</string>
     <string name="card_perm_desc">Detects media playing from any app on your device. Use the exception list below to ignore specific apps (like YouTube or browsers).</string>
     <string name="perm_status_ok">● Permission Granted</string>
@@ -19,21 +24,33 @@
     <string name="chk_local_only_title">Use notification artwork only (Offline Mode)</string>
     <string name="chk_local_only_desc">Skips online animated/iTunes search and uses the exact cover embedded in your media player notification.</string>
 
+    <string name="chk_wifi_only_title">Animated covers on Wi-Fi only</string>
+    <string name="chk_wifi_only_desc">Saves mobile data by using static album covers on 4G/5G and playing animated .m3u8 videos only on Wi-Fi.</string>
+
+    <string name="chk_battery_saver_title">Pause animations in Battery Saver</string>
+    <string name="chk_battery_saver_desc">Automatically freezes animated covers as a sharp static frame while Android Battery Saver is active.</string>
+
     <string name="chk_pixel_colors_title">Dynamic System Colors (Pixel 7+ Exclusive)</string>
     <string name="chk_pixel_colors_desc">Extracts Material You colors from the album cover only while on the Lockscreen (60s cooldown to protect CPU).</string>
 
-    <string name="diag_box_title">🔍 Last Detected Media (Tap to copy)</string>
+    <string name="btn_clear_cache">🗑️ Clear Artwork Cache (%1$s)</string>
+    <string name="toast_cache_cleared">Artwork cache cleared!</string>
+
+    <string name="diag_header_collapsed">🔍 Media Diagnostics ▾</string>
+    <string name="diag_header_expanded">🔍 Media Diagnostics ▴</string>
+    <string name="diag_copy_hint">Tap the text below to copy metadata</string>
     <string name="diag_box_empty">No active music detected yet. Play a song on your media player to inspect its metadata.</string>
     <string name="toast_diag_copied">Diagnostic metadata copied to clipboard!</string>
 
     <string name="card_photo_title">2. Standby &amp; Home Wallpapers</string>
-    <string name="card_photo_desc">Lockscreen standby photo is displayed automatically 5 seconds after music is paused.</string>
+    <string name="card_photo_desc">Lockscreen standby photo is displayed automatically after music is paused.</string>
     <string name="btn_pick_photo">Choose Lockscreen Standby Photo</string>
     <string name="status_photo_ok">✅ Custom lockscreen photo active</string>
     <string name="status_photo_none">ℹ️ No custom lockscreen photo selected yet</string>
     <string name="chooser_title">Select a wallpaper photo</string>
     <string name="toast_photo_saved">Wallpaper photo saved successfully!</string>
 
+    <string name="pause_delay_title">Standby delay after pausing</string>
     <string name="chk_keep_cover_title">Keep last album cover when paused</string>
     <string name="chk_keep_cover_desc">Ignores the standby wallpaper when music stops and keeps the last animated or static cover active on screen.</string>
 
@@ -42,6 +59,7 @@
     <string name="home_photo_section_title">Home Screen Appearance</string>
     <string name="chk_home_blur_title">Use diffused album blur on Home Screen</string>
     <string name="chk_home_blur_desc">Fills your Home Screen with a soft, darkened Gaussian blur of the current album cover for clean icon readability.</string>
+    <string name="home_blur_brightness_format">Home Diffusion Brightness: %1$d%%</string>
     <string name="home_blur_photo_section_title">Home Screen Photo (when music stops)</string>
     <string name="btn_pick_home_blur_photo">Choose Home Screen Standby Photo</string>
     <string name="status_home_blur_photo_ok">✅ Custom home standby photo active</string>
@@ -50,10 +68,21 @@
     <string name="status_home_photo_none">ℹ️ Using lockscreen standby photo as fallback</string>
 
     <string name="card_pos_title">3. Artwork &amp; Blur Adjustments</string>
+    <string name="preview_caption">Live Lockscreen Preview</string>
+    <string name="preview_date_sample">Sat, Nov 21</string>
     <string name="pos_label_format">Vertical Position (from top): %1$d%%</string>
     <string name="blur_label_format">Blur Intensity: %1$d%%</string>
     <string name="expand_label_format">Cover Expansion (up to 95%% screen): %1$d%%</string>
-    <string name="btn_reset_pos">Reset Adjustments (20% Pos | 100% Blur | 0% Exp)</string>
+    <string name="dim_label_format">Cover Dimming: %1$d%%</string>
+    <string name="chk_clock_gradient_title">Top gradient shadow for clock</string>
+    <string name="chk_clock_gradient_desc">Adds a subtle dark vignette at the top of the Lockscreen to improve clock readability on bright album covers.</string>
+    <string name="chk_static_zoom_title">Subtle zoom animation on static covers</string>
+    <string name="chk_static_zoom_desc">Applies a gentle zoom in/out breathing effect when an album has no animated artwork available.</string>
+    <string name="static_zoom_speed_title">Zoom animation speed</string>
+    <string name="static_zoom_speed_fast">Fast (8s)</string>
+    <string name="static_zoom_speed_medium">Medium (12s)</string>
+    <string name="static_zoom_speed_slow">Slow (18s)</string>
+    <string name="btn_reset_pos">Reset Adjustments to Default</string>
 
     <string name="btn_activate_wallpaper">Activate Live Wallpaper</string>
     <string name="toast_error_generic">Could not open system screen</string>
@@ -92,7 +121,7 @@
     <string name="faq_a5">In Card 1 (Music Detection), tap \"Ignored Apps\" and check any video players, social media apps, or browsers you don\'t want MusicWallpaper to track.</string>
 
     <string name="faq_q6">6. Why are some songs static or take a few seconds to update on slow Wi-Fi?</string>
-    <string name="faq_a6">Not all albums have official animated artwork in Apple Music. When unavailable, the app automatically downloads the 1000x1000 static cover or uses your player\'s notification artwork. On slow connections, the previous cover stays smoothly on screen while an automatic 4-second retry loads the new artwork.</string>
+    <string name="faq_a6">Not all albums have official animated artwork in Apple Music. When unavailable, the app automatically downloads the 1000x1000 static cover or uses your player\'s notification artwork. On slow connections, the previous cover stays smoothly on screen while automatic 2s and 4s checks load the new artwork.</string>
 
     <string name="faq_q7">7. Does keeping the animated cover on pause or using Home Screen Diffusion drain a lot of battery?</string>
     <string name="faq_a7">No. Both the video decoder (ExoPlayer) and GPU blur passes automatically pause whenever the screen turns off. On the Home Screen with Diffusion enabled, the crossfade lasts 260ms and video playback pauses right after, keeping battery usage virtually zero.</string>

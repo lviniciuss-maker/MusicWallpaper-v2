@@ -12,13 +12,17 @@ import android.content.DialogInterface
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.res.ColorStateList
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
@@ -58,19 +62,61 @@ import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
 import kotlin.concurrent.thread
 import kotlin.math.max
 
 class MainActivity : AppCompatActivity() {
 
+    private data class AppPalette(
+        val isDark: Boolean,
+        val bg: Int,
+        val cardBg: Int,
+        val cardStroke: Int,
+        val subCardBg: Int,
+        val subCardStroke: Int,
+        val toggleRowBg: Int,
+        val secondaryBtnBg: Int,
+        val secondaryBtnText: Int,
+        val primaryText: Int,
+        val secondaryText: Int,
+        val mutedText: Int,
+        val bodyText: Int,
+        val accent: Int,
+        val accentOnPrimary: Int,
+        val badgeOk: Int,
+        val badgeMissing: Int,
+        val warnBg: Int,
+        val warnStroke: Int,
+        val warnText: Int,
+        val diagBg: Int,
+        val diagStroke: Int,
+        val diagText: Int,
+        val inputBg: Int,
+        val pillUnselectedBg: Int,
+        val pillUnselectedStroke: Int,
+        val previewPlaceholder: Int,
+        val previewFrameBorder: Int,
+        val adbBtnBg: Int,
+        val adbBtnStroke: Int,
+        val dialogStroke: Int
+    )
+
+    private lateinit var palette: AppPalette
+
     private var permStatusBadge: TextView? = null
     private var btnRestrictedHelp: Button? = null
     private var restrictedHelpSpacer: View? = null
     private var btnExcludedApps: Button? = null
+    private var btnClearCache: Button? = null
     private var diagBodyTv: TextView? = null
+    private var isDiagExpanded: Boolean = false
 
     private var statusText: TextView? = null
     private var previewImageView: ImageView? = null
+
+    private var pauseDelayContainer: LinearLayout? = null
+    private var staticZoomSpeedContainer: LinearLayout? = null
 
     private var homePhotoContainer: LinearLayout? = null
     private var homeStatusText: TextView? = null
@@ -91,6 +137,7 @@ class MainActivity : AppCompatActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == "com.lucasvinicius.musicwallpaper2.ACTION_DEBUG_METADATA_UPDATED") {
                 updateDiagnosticUI()
+                updateCacheSizeUI()
             }
         }
     }
@@ -101,20 +148,119 @@ class MainActivity : AppCompatActivity() {
         val icon: Drawable
     )
 
+    private fun buildPalette(isDark: Boolean): AppPalette {
+        return if (isDark) {
+            AppPalette(
+                isDark = true,
+                bg = Color.parseColor("#0D0F14"),
+                cardBg = Color.parseColor("#181B24"),
+                cardStroke = Color.parseColor("#262A38"),
+                subCardBg = Color.parseColor("#141720"),
+                subCardStroke = Color.parseColor("#262B3C"),
+                toggleRowBg = Color.parseColor("#202431"),
+                secondaryBtnBg = Color.parseColor("#262B3C"),
+                secondaryBtnText = Color.WHITE,
+                primaryText = Color.WHITE,
+                secondaryText = Color.parseColor("#9AA0B4"),
+                mutedText = Color.parseColor("#7E859B"),
+                bodyText = Color.parseColor("#D5D9E6"),
+                accent = Color.parseColor("#8AB4F8"),
+                accentOnPrimary = Color.parseColor("#0D0F14"),
+                badgeOk = Color.parseColor("#6DD58C"),
+                badgeMissing = Color.parseColor("#F28B82"),
+                warnBg = Color.parseColor("#2A261D"),
+                warnStroke = Color.parseColor("#4D4329"),
+                warnText = Color.parseColor("#FDD663"),
+                diagBg = Color.parseColor("#13161F"),
+                diagStroke = Color.parseColor("#252B3D"),
+                diagText = Color.parseColor("#C6CCDF"),
+                inputBg = Color.parseColor("#252936"),
+                pillUnselectedBg = Color.parseColor("#141720"),
+                pillUnselectedStroke = Color.parseColor("#2C3245"),
+                previewPlaceholder = Color.parseColor("#252936"),
+                previewFrameBorder = Color.parseColor("#3B4359"),
+                adbBtnBg = Color.parseColor("#1E2433"),
+                adbBtnStroke = Color.parseColor("#33415C"),
+                dialogStroke = Color.parseColor("#2A3042")
+            )
+        } else {
+            AppPalette(
+                isDark = false,
+                bg = Color.parseColor("#F4F6FA"),
+                cardBg = Color.parseColor("#FFFFFF"),
+                cardStroke = Color.parseColor("#DCE1EC"),
+                subCardBg = Color.parseColor("#F0F3F8"),
+                subCardStroke = Color.parseColor("#D5DCE8"),
+                toggleRowBg = Color.parseColor("#EDF1F7"),
+                secondaryBtnBg = Color.parseColor("#E5EAF3"),
+                secondaryBtnText = Color.parseColor("#111827"),
+                primaryText = Color.parseColor("#111827"),
+                secondaryText = Color.parseColor("#525B6E"),
+                mutedText = Color.parseColor("#6B7280"),
+                bodyText = Color.parseColor("#374151"),
+                accent = Color.parseColor("#1A73E8"),
+                accentOnPrimary = Color.WHITE,
+                badgeOk = Color.parseColor("#1E8E3E"),
+                badgeMissing = Color.parseColor("#D93025"),
+                warnBg = Color.parseColor("#FEF7E0"),
+                warnStroke = Color.parseColor("#F5D67B"),
+                warnText = Color.parseColor("#8C5E00"),
+                diagBg = Color.parseColor("#EEF2F8"),
+                diagStroke = Color.parseColor("#D5DCE8"),
+                diagText = Color.parseColor("#1F2937"),
+                inputBg = Color.parseColor("#E8EDF5"),
+                pillUnselectedBg = Color.parseColor("#FFFFFF"),
+                pillUnselectedStroke = Color.parseColor("#D0D7E5"),
+                previewPlaceholder = Color.parseColor("#DCE2EC"),
+                previewFrameBorder = Color.parseColor("#9AA3B5"),
+                adbBtnBg = Color.parseColor("#E6EFFD"),
+                adbBtnStroke = Color.parseColor("#B8D0FA"),
+                dialogStroke = Color.parseColor("#D0D7E5")
+            )
+        }
+    }
+
+    private fun resolveIsDarkTheme(themeMode: Int): Boolean {
+        return when (themeMode) {
+            1 -> false
+            2 -> true
+            else -> (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         supportActionBar?.hide()
-        window.statusBarColor = Color.parseColor("#0D0F14")
-        window.navigationBarColor = Color.parseColor("#0D0F14")
-        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
 
         val prefs = getSharedPreferences("wallpaper_prefs", MODE_PRIVATE)
-        val savedOffsetPercent = prefs.getInt("top_offset_percent", 20).coerceIn(0, 60)
-        val savedBlurPercent = prefs.getInt("blur_strength_percent", 100).coerceIn(60, 100)
-        val savedExpansionPercent = prefs.getInt("cover_expansion_percent", 0).coerceIn(0, 100)
+        val currentThemeMode = prefs.getInt("app_theme_mode", 0).coerceIn(0, 2)
+        val isDark = resolveIsDarkTheme(currentThemeMode)
+        palette = buildPalette(isDark)
+
+        window.statusBarColor = palette.bg
+        window.navigationBarColor = palette.bg
+        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+        insetsController.isAppearanceLightStatusBars = !isDark
+        insetsController.isAppearanceLightNavigationBars = !isDark
+
+        var currentOffsetPercent = prefs.getInt("top_offset_percent", 20).coerceIn(0, 60)
+        var currentBlurPercent = prefs.getInt("blur_strength_percent", 100).coerceIn(60, 100)
+        var currentExpansionPercent = prefs.getInt("cover_expansion_percent", 0).coerceIn(0, 100)
+        var currentDimPercent = prefs.getInt("cover_dim_percent", 0).coerceIn(0, 40)
+        var currentClockGradient = prefs.getBoolean("clock_top_gradient", false)
+        val savedStaticZoomEnabled = prefs.getBoolean("static_cover_zoom_enabled", false)
+        var currentStaticZoomCycleSec = prefs.getInt("static_cover_zoom_cycle_sec", 12).let {
+            if (it in listOf(8, 12, 18)) it else 12
+        }
+        val savedHomeBlurBrightness = prefs.getInt("home_blur_brightness_percent", 82).coerceIn(40, 100)
         val savedOfflineOnly = prefs.getBoolean("offline_only_mode", false)
+        val savedWifiOnlyAnimated = prefs.getBoolean("wifi_only_animated", false)
+        val savedPauseOnBatterySaver = prefs.getBoolean("pause_on_battery_saver", true)
         val savedKeepLastCover = prefs.getBoolean("keep_last_cover_on_pause", false)
+        var currentPauseDelaySec = prefs.getInt("pause_delay_seconds", 5).let {
+            if (it in listOf(5, 15, 30, 60)) it else 5
+        }
         val savedHomeUseAlbumBlur = prefs.getBoolean("home_use_album_blur", false)
         var savedLockscreenOnly = prefs.getBoolean("lockscreen_only_mode", false)
         if (savedHomeUseAlbumBlur && savedLockscreenOnly) {
@@ -125,7 +271,7 @@ class MainActivity : AppCompatActivity() {
         val currentAppVersion = getInstalledVersionName()
 
         val scrollView = ScrollView(this).apply {
-            setBackgroundColor(Color.parseColor("#0D0F14"))
+            setBackgroundColor(palette.bg)
             isFillViewport = true
         }
 
@@ -136,23 +282,71 @@ class MainActivity : AppCompatActivity() {
 
         val titleText = TextView(this).apply {
             text = getString(R.string.app_name)
-            setTextColor(Color.WHITE)
+            setTextColor(palette.primaryText)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 28f)
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
         }
 
         val subtitleText = TextView(this).apply {
             text = getString(R.string.app_subtitle)
-            setTextColor(Color.parseColor("#9AA0B4"))
+            setTextColor(palette.secondaryText)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            setPadding(0, dp(4), 0, dp(24))
+            setPadding(0, dp(4), 0, dp(16))
+        }
+
+        // =========================================================================
+        // SELETOR COMPACTO DE TEMA (SISTEMA | CLARO | ESCURO)
+        // =========================================================================
+        val themeBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(6), dp(6), dp(6), dp(6))
+            background = GradientDrawable().apply {
+                setColor(palette.cardBg)
+                cornerRadius = dp(14).toFloat()
+                setStroke(dp(1), palette.cardStroke)
+            }
+        }
+
+        val themeOptions = listOf(
+            Pair(0, getString(R.string.theme_system)),
+            Pair(1, getString(R.string.theme_light)),
+            Pair(2, getString(R.string.theme_dark))
+        )
+
+        themeOptions.forEachIndexed { idx, (mode, label) ->
+            val isSelected = (mode == currentThemeMode)
+            val pill = TextView(this).apply {
+                text = label
+                gravity = Gravity.CENTER
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+                setTextColor(if (isSelected) palette.accentOnPrimary else palette.secondaryText)
+                typeface = if (isSelected) Typeface.create("sans-serif-medium", Typeface.BOLD) else Typeface.DEFAULT
+                setPadding(dp(8), dp(8), dp(8), dp(8))
+                background = GradientDrawable().apply {
+                    setColor(if (isSelected) palette.accent else Color.TRANSPARENT)
+                    cornerRadius = dp(10).toFloat()
+                }
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    if (idx < themeOptions.lastIndex) marginEnd = dp(4)
+                }
+                setOnClickListener {
+                    if (mode != currentThemeMode) {
+                        prefs.edit().putInt("app_theme_mode", mode).apply()
+                        recreate()
+                    }
+                }
+            }
+            themeBar.addView(pill)
         }
 
         rootLayout.addView(titleText)
         rootLayout.addView(subtitleText)
+        rootLayout.addView(themeBar)
+        rootLayout.addView(createSpacer(18))
 
         // =========================================================================
-        // CARTÃO 1: PERMISSÃO + EXCEÇÕES + MODO OFFLINE + PIXEL 7+ + DIAGNÓSTICO
+        // CARTÃO 1: PERMISSÃO + EXCEÇÕES + OFFLINE + WI-FI + BATERIA + CACHE + DIAGNÓSTICO
         // =========================================================================
         val cardPerm = createCardLayout()
 
@@ -179,12 +373,12 @@ class MainActivity : AppCompatActivity() {
         btnRestrictedHelp = Button(this).apply {
             text = getString(R.string.btn_restricted_help)
             isAllCaps = false
-            setTextColor(Color.parseColor("#FDD663"))
+            setTextColor(palette.warnText)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#2A261D"))
+                setColor(palette.warnBg)
                 cornerRadius = dp(12).toFloat()
-                setStroke(dp(1), Color.parseColor("#4D4329"))
+                setStroke(dp(1), palette.warnStroke)
             }
             setPadding(dp(14), dp(10), dp(14), dp(10))
             setOnClickListener {
@@ -208,16 +402,78 @@ class MainActivity : AppCompatActivity() {
             notifySettingsChanged()
         }
 
+        val wifiOnlyRow = createToggleRow(
+            title = getString(R.string.chk_wifi_only_title),
+            desc = getString(R.string.chk_wifi_only_desc),
+            initialChecked = savedWifiOnlyAnimated
+        ) { newState ->
+            prefs.edit().putBoolean("wifi_only_animated", newState).apply()
+            notifySettingsChanged()
+        }
+
+        val batterySaverRow = createToggleRow(
+            title = getString(R.string.chk_battery_saver_title),
+            desc = getString(R.string.chk_battery_saver_desc),
+            initialChecked = savedPauseOnBatterySaver
+        ) { newState ->
+            prefs.edit().putBoolean("pause_on_battery_saver", newState).apply()
+            notifySettingsChanged()
+        }
+
+        btnClearCache = createSecondaryButton(getString(R.string.btn_clear_cache, "0.0 MB")).apply {
+            setOnClickListener {
+                thread {
+                    try {
+                        File(cacheDir, "artwork_cache").deleteRecursively()
+                    } catch (_: Throwable) {}
+                    runOnUiThread {
+                        sendBroadcast(Intent("com.lucasvinicius.musicwallpaper2.ACTION_CLEAR_CACHE").apply {
+                            setPackage(packageName)
+                        })
+                        updateCacheSizeUI()
+                        Toast.makeText(this@MainActivity, getString(R.string.toast_cache_cleared), Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+
         val diagBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+            setPadding(dp(12), dp(11), dp(12), dp(11))
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#13161F"))
+                setColor(palette.diagBg)
                 cornerRadius = dp(12).toFloat()
-                setStroke(dp(1), Color.parseColor("#252B3D"))
+                setStroke(dp(1), palette.diagStroke)
             }
+        }
+
+        val diagHeaderTv = TextView(this).apply {
+            text = getString(R.string.diag_header_collapsed)
+            setTextColor(palette.accent)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        }
+
+        val diagContentContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            setPadding(0, dp(8), 0, 0)
+        }
+
+        val diagHintTv = TextView(this).apply {
+            text = getString(R.string.diag_copy_hint)
+            setTextColor(palette.mutedText)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+            setPadding(0, 0, 0, dp(6))
+        }
+
+        diagBodyTv = TextView(this).apply {
+            setTextColor(palette.diagText)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            typeface = Typeface.MONOSPACE
+            setLineSpacing(dp(2).toFloat(), 1.05f)
             setOnClickListener {
-                val textToCopy = diagBodyTv?.text?.toString() ?: ""
+                val textToCopy = text?.toString() ?: ""
                 if (textToCopy.isNotEmpty()) {
                     val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     clipboard.setPrimaryClip(ClipData.newPlainText("MusicWallpaper Metadata", textToCopy))
@@ -226,23 +482,21 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val diagTitleTv = TextView(this).apply {
-            text = getString(R.string.diag_box_title)
-            setTextColor(Color.parseColor("#8AB4F8"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
-            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-            setPadding(0, 0, 0, dp(4))
+        diagContentContainer.addView(diagHintTv)
+        diagContentContainer.addView(diagBodyTv)
+
+        diagHeaderTv.setOnClickListener {
+            isDiagExpanded = !isDiagExpanded
+            diagContentContainer.visibility = if (isDiagExpanded) View.VISIBLE else View.GONE
+            diagHeaderTv.text = if (isDiagExpanded) {
+                getString(R.string.diag_header_expanded)
+            } else {
+                getString(R.string.diag_header_collapsed)
+            }
         }
 
-        diagBodyTv = TextView(this).apply {
-            setTextColor(Color.parseColor("#C6CCDF"))
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
-            typeface = Typeface.MONOSPACE
-            setLineSpacing(dp(2).toFloat(), 1.05f)
-        }
-
-        diagBox.addView(diagTitleTv)
-        diagBox.addView(diagBodyTv)
+        diagBox.addView(diagHeaderTv)
+        diagBox.addView(diagContentContainer)
 
         cardPerm.addView(permTitle)
         cardPerm.addView(permDesc)
@@ -254,6 +508,10 @@ class MainActivity : AppCompatActivity() {
         cardPerm.addView(btnExcludedApps)
         cardPerm.addView(createSpacer(12))
         cardPerm.addView(localOnlyRow)
+        cardPerm.addView(createSpacer(10))
+        cardPerm.addView(wifiOnlyRow)
+        cardPerm.addView(createSpacer(10))
+        cardPerm.addView(batterySaverRow)
 
         if (isGooglePixel7OrNewer()) {
             val pixelColorsRow = createToggleRow(
@@ -269,12 +527,14 @@ class MainActivity : AppCompatActivity() {
         }
 
         cardPerm.addView(createSpacer(12))
+        cardPerm.addView(btnClearCache)
+        cardPerm.addView(createSpacer(10))
         cardPerm.addView(diagBox)
         rootLayout.addView(cardPerm)
         rootLayout.addView(createSpacer(16))
 
         // =========================================================================
-        // CARTÃO 2: FOTOS DE ESPERA + MANTER CAPA AO PAUSAR + OPÇÕES DA TELA INICIAL
+        // CARTÃO 2: FOTOS DE ESPERA + TEMPO DE PAUSA + MANTER CAPA + TELA INICIAL
         // =========================================================================
         val cardPhoto = createCardLayout()
 
@@ -293,14 +553,14 @@ class MainActivity : AppCompatActivity() {
             }
             scaleType = ImageView.ScaleType.CENTER_CROP
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#252936"))
+                setColor(palette.previewPlaceholder)
                 cornerRadius = dp(10).toFloat()
             }
             clipToOutline = true
         }
 
         statusText = TextView(this).apply {
-            setTextColor(Color.parseColor("#D5D9E6"))
+            setTextColor(palette.bodyText)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
@@ -322,12 +582,83 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        pauseDelayContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = GradientDrawable().apply {
+                setColor(palette.toggleRowBg)
+                cornerRadius = dp(12).toFloat()
+            }
+            visibility = if (savedKeepLastCover) View.GONE else View.VISIBLE
+        }
+
+        val pauseDelayTitleTv = TextView(this).apply {
+            text = getString(R.string.pause_delay_title)
+            setTextColor(palette.primaryText)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setPadding(0, 0, 0, dp(10))
+        }
+
+        val pauseDelayOptionsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val delayOptions = listOf(
+            Pair(5, "5s"),
+            Pair(15, "15s"),
+            Pair(30, "30s"),
+            Pair(60, "1 min")
+        )
+        val delayButtons = mutableListOf<Pair<Int, TextView>>()
+
+        fun styleDelayButtons(selectedSec: Int) {
+            for ((sec, tv) in delayButtons) {
+                val isSelected = (sec == selectedSec)
+                tv.setTextColor(if (isSelected) palette.accentOnPrimary else palette.bodyText)
+                tv.typeface = if (isSelected) Typeface.create("sans-serif-medium", Typeface.BOLD) else Typeface.DEFAULT
+                tv.background = GradientDrawable().apply {
+                    setColor(if (isSelected) palette.accent else palette.pillUnselectedBg)
+                    cornerRadius = dp(10).toFloat()
+                    if (!isSelected) {
+                        setStroke(dp(1), palette.pillUnselectedStroke)
+                    }
+                }
+            }
+        }
+
+        delayOptions.forEachIndexed { idx, (seconds, label) ->
+            val pill = TextView(this).apply {
+                text = label
+                gravity = Gravity.CENTER
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                setPadding(dp(8), dp(9), dp(8), dp(9))
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    if (idx < delayOptions.lastIndex) marginEnd = dp(8)
+                }
+                setOnClickListener {
+                    currentPauseDelaySec = seconds
+                    prefs.edit().putInt("pause_delay_seconds", seconds).apply()
+                    styleDelayButtons(seconds)
+                    notifySettingsChanged()
+                }
+            }
+            delayButtons.add(Pair(seconds, pill))
+            pauseDelayOptionsRow.addView(pill)
+        }
+        styleDelayButtons(currentPauseDelaySec)
+
+        pauseDelayContainer?.addView(pauseDelayTitleTv)
+        pauseDelayContainer?.addView(pauseDelayOptionsRow)
+
         val keepLastCoverRow = createToggleRow(
             title = getString(R.string.chk_keep_cover_title),
             desc = getString(R.string.chk_keep_cover_desc),
             initialChecked = savedKeepLastCover
         ) { newState ->
             prefs.edit().putBoolean("keep_last_cover_on_pause", newState).apply()
+            pauseDelayContainer?.visibility = if (newState) View.GONE else View.VISIBLE
             notifySettingsChanged()
         }
 
@@ -372,16 +703,44 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(14), dp(14), dp(14))
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#141720"))
+                setColor(palette.subCardBg)
                 cornerRadius = dp(14).toFloat()
-                setStroke(dp(1), Color.parseColor("#262B3C"))
+                setStroke(dp(1), palette.subCardStroke)
             }
             visibility = if (savedHomeUseAlbumBlur) View.VISIBLE else View.GONE
         }
 
+        val homeBlurBrightnessLabel = TextView(this).apply {
+            text = getString(R.string.home_blur_brightness_format, savedHomeBlurBrightness)
+            setTextColor(palette.accent)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setPadding(0, 0, 0, dp(6))
+        }
+
+        val seekBarHomeBlurBrightness = SeekBar(this).apply {
+            max = 60
+            progress = (savedHomeBlurBrightness - 40).coerceIn(0, 60)
+            progressTintList = ColorStateList.valueOf(palette.accent)
+            thumbTintList = ColorStateList.valueOf(palette.accent)
+            setPadding(dp(14), dp(6), dp(14), dp(14))
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val actualPercent = 40 + progress
+                    homeBlurBrightnessLabel.text = getString(R.string.home_blur_brightness_format, actualPercent)
+                    if (fromUser) {
+                        prefs.edit().putInt("home_blur_brightness_percent", actualPercent).apply()
+                        notifySettingsChanged()
+                    }
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+        }
+
         val homeBlurSectionTitle = TextView(this).apply {
             text = getString(R.string.home_blur_photo_section_title)
-            setTextColor(Color.parseColor("#8AB4F8"))
+            setTextColor(palette.accent)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
         }
@@ -398,14 +757,14 @@ class MainActivity : AppCompatActivity() {
             }
             scaleType = ImageView.ScaleType.CENTER_CROP
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#252936"))
+                setColor(palette.previewPlaceholder)
                 cornerRadius = dp(10).toFloat()
             }
             clipToOutline = true
         }
 
         homeBlurStatusText = TextView(this).apply {
-            setTextColor(Color.parseColor("#D5D9E6"))
+            setTextColor(palette.bodyText)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
@@ -427,6 +786,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        homeBlurPhotoContainer?.addView(homeBlurBrightnessLabel)
+        homeBlurPhotoContainer?.addView(seekBarHomeBlurBrightness)
         homeBlurPhotoContainer?.addView(homeBlurSectionTitle)
         homeBlurPhotoContainer?.addView(homeBlurPhotoRow)
         homeBlurPhotoContainer?.addView(btnPickHomeBlurImage)
@@ -435,16 +796,16 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), dp(14), dp(14), dp(14))
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#141720"))
+                setColor(palette.subCardBg)
                 cornerRadius = dp(14).toFloat()
-                setStroke(dp(1), Color.parseColor("#262B3C"))
+                setStroke(dp(1), palette.subCardStroke)
             }
             visibility = if (savedLockscreenOnly) View.VISIBLE else View.GONE
         }
 
         val homeSectionTitle = TextView(this).apply {
             text = getString(R.string.home_photo_section_title)
-            setTextColor(Color.parseColor("#8AB4F8"))
+            setTextColor(palette.accent)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
         }
@@ -461,14 +822,14 @@ class MainActivity : AppCompatActivity() {
             }
             scaleType = ImageView.ScaleType.CENTER_CROP
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#252936"))
+                setColor(palette.previewPlaceholder)
                 cornerRadius = dp(10).toFloat()
             }
             clipToOutline = true
         }
 
         homeStatusText = TextView(this).apply {
-            setTextColor(Color.parseColor("#D5D9E6"))
+            setTextColor(palette.bodyText)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
@@ -501,6 +862,8 @@ class MainActivity : AppCompatActivity() {
         cardPhoto.addView(createSpacer(12))
         cardPhoto.addView(keepLastCoverRow)
         cardPhoto.addView(createSpacer(10))
+        cardPhoto.addView(pauseDelayContainer)
+        cardPhoto.addView(createSpacer(10))
         cardPhoto.addView(homeUseBlurRow)
         cardPhoto.addView(createSpacer(8))
         cardPhoto.addView(homeBlurPhotoContainer)
@@ -512,29 +875,64 @@ class MainActivity : AppCompatActivity() {
         rootLayout.addView(createSpacer(16))
 
         // =========================================================================
-        // CARTÃO 3: POSIÇÃO VERTICAL (ATÉ 60%) + INTENSIDADE DO BLUR + EXPANSÃO (95%)
+        // CARTÃO 3: PREVIEW + POSIÇÃO (60%) + BLUR + EXPANSÃO + DIMMER + RELÓGIO + ZOOM
         // =========================================================================
         val cardPos = createCardLayout()
 
         val posTitle = createCardTitle(getString(R.string.card_pos_title))
 
+        val previewWrapper = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, dp(14), 0, dp(10))
+        }
+
+        val lockscreenPreview = LockscreenPreviewView(
+            this,
+            getString(R.string.preview_date_sample),
+            palette.previewFrameBorder
+        ).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(128), dp(276))
+            updateParams(
+                topOffsetPercent = currentOffsetPercent,
+                blurPercent = currentBlurPercent,
+                expansionPercent = currentExpansionPercent,
+                dimPercent = currentDimPercent,
+                clockGradient = currentClockGradient
+            )
+        }
+
+        val previewCaptionTv = TextView(this).apply {
+            text = getString(R.string.preview_caption)
+            setTextColor(palette.mutedText)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
+            setPadding(0, dp(8), 0, 0)
+        }
+
+        previewWrapper.addView(lockscreenPreview)
+        previewWrapper.addView(previewCaptionTv)
+
         val sliderLabel = TextView(this).apply {
-            setTextColor(Color.parseColor("#8AB4F8"))
+            setTextColor(palette.accent)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             typeface = Typeface.DEFAULT_BOLD
             setPadding(0, dp(10), 0, dp(8))
-            text = getString(R.string.pos_label_format, savedOffsetPercent)
+            text = getString(R.string.pos_label_format, currentOffsetPercent)
         }
 
         val seekBarPos = SeekBar(this).apply {
             max = 60
-            progress = savedOffsetPercent
-            progressTintList = ColorStateList.valueOf(Color.parseColor("#8AB4F8"))
-            thumbTintList = ColorStateList.valueOf(Color.parseColor("#8AB4F8"))
-            setPadding(dp(4), dp(4), dp(4), dp(14))
+            progress = currentOffsetPercent
+            progressTintList = ColorStateList.valueOf(palette.accent)
+            thumbTintList = ColorStateList.valueOf(palette.accent)
+            setPadding(dp(14), dp(6), dp(14), dp(14))
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    currentOffsetPercent = progress
                     sliderLabel.text = getString(R.string.pos_label_format, progress)
+                    lockscreenPreview.updateParams(
+                        currentOffsetPercent, currentBlurPercent, currentExpansionPercent, currentDimPercent, currentClockGradient
+                    )
                     if (fromUser) {
                         prefs.edit().putInt("top_offset_percent", progress).apply()
                         notifySettingsChanged()
@@ -546,25 +944,28 @@ class MainActivity : AppCompatActivity() {
         }
 
         val blurLabel = TextView(this).apply {
-            setTextColor(Color.parseColor("#8AB4F8"))
+            setTextColor(palette.accent)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             typeface = Typeface.DEFAULT_BOLD
             setPadding(0, dp(6), 0, dp(8))
-            text = getString(R.string.blur_label_format, savedBlurPercent)
+            text = getString(R.string.blur_label_format, currentBlurPercent)
         }
 
         val seekBarBlur = SeekBar(this).apply {
             max = 40
-            progress = (savedBlurPercent - 60).coerceIn(0, 40)
-            progressTintList = ColorStateList.valueOf(Color.parseColor("#8AB4F8"))
-            thumbTintList = ColorStateList.valueOf(Color.parseColor("#8AB4F8"))
-            setPadding(dp(4), dp(4), dp(4), dp(14))
+            progress = (currentBlurPercent - 60).coerceIn(0, 40)
+            progressTintList = ColorStateList.valueOf(palette.accent)
+            thumbTintList = ColorStateList.valueOf(palette.accent)
+            setPadding(dp(14), dp(6), dp(14), dp(14))
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val actualPercent = 60 + progress
-                    blurLabel.text = getString(R.string.blur_label_format, actualPercent)
+                    currentBlurPercent = 60 + progress
+                    blurLabel.text = getString(R.string.blur_label_format, currentBlurPercent)
+                    lockscreenPreview.updateParams(
+                        currentOffsetPercent, currentBlurPercent, currentExpansionPercent, currentDimPercent, currentClockGradient
+                    )
                     if (fromUser) {
-                        prefs.edit().putInt("blur_strength_percent", actualPercent).apply()
+                        prefs.edit().putInt("blur_strength_percent", currentBlurPercent).apply()
                         notifySettingsChanged()
                     }
                 }
@@ -574,22 +975,26 @@ class MainActivity : AppCompatActivity() {
         }
 
         val expandLabel = TextView(this).apply {
-            setTextColor(Color.parseColor("#8AB4F8"))
+            setTextColor(palette.accent)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             typeface = Typeface.DEFAULT_BOLD
             setPadding(0, dp(6), 0, dp(8))
-            text = getString(R.string.expand_label_format, savedExpansionPercent)
+            text = getString(R.string.expand_label_format, currentExpansionPercent)
         }
 
         val seekBarExpand = SeekBar(this).apply {
             max = 100
-            progress = savedExpansionPercent
-            progressTintList = ColorStateList.valueOf(Color.parseColor("#8AB4F8"))
-            thumbTintList = ColorStateList.valueOf(Color.parseColor("#8AB4F8"))
-            setPadding(dp(4), dp(4), dp(4), dp(16))
+            progress = currentExpansionPercent
+            progressTintList = ColorStateList.valueOf(palette.accent)
+            thumbTintList = ColorStateList.valueOf(palette.accent)
+            setPadding(dp(14), dp(6), dp(14), dp(14))
             setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    currentExpansionPercent = progress
                     expandLabel.text = getString(R.string.expand_label_format, progress)
+                    lockscreenPreview.updateParams(
+                        currentOffsetPercent, currentBlurPercent, currentExpansionPercent, currentDimPercent, currentClockGradient
+                    )
                     if (fromUser) {
                         prefs.edit().putInt("cover_expansion_percent", progress).apply()
                         notifySettingsChanged()
@@ -600,27 +1005,178 @@ class MainActivity : AppCompatActivity() {
             })
         }
 
+        val dimLabel = TextView(this).apply {
+            setTextColor(palette.accent)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, dp(6), 0, dp(8))
+            text = getString(R.string.dim_label_format, currentDimPercent)
+        }
+
+        val seekBarDim = SeekBar(this).apply {
+            max = 40
+            progress = currentDimPercent
+            progressTintList = ColorStateList.valueOf(palette.accent)
+            thumbTintList = ColorStateList.valueOf(palette.accent)
+            setPadding(dp(14), dp(6), dp(14), dp(14))
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    currentDimPercent = progress
+                    dimLabel.text = getString(R.string.dim_label_format, progress)
+                    lockscreenPreview.updateParams(
+                        currentOffsetPercent, currentBlurPercent, currentExpansionPercent, currentDimPercent, currentClockGradient
+                    )
+                    if (fromUser) {
+                        prefs.edit().putInt("cover_dim_percent", progress).apply()
+                        notifySettingsChanged()
+                    }
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+        }
+
+        val clockGradientRow = createToggleRow(
+            title = getString(R.string.chk_clock_gradient_title),
+            desc = getString(R.string.chk_clock_gradient_desc),
+            initialChecked = currentClockGradient
+        ) { newState ->
+            currentClockGradient = newState
+            lockscreenPreview.updateParams(
+                currentOffsetPercent, currentBlurPercent, currentExpansionPercent, currentDimPercent, currentClockGradient
+            )
+            prefs.edit().putBoolean("clock_top_gradient", newState).apply()
+            notifySettingsChanged()
+        }
+
+        staticZoomSpeedContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = GradientDrawable().apply {
+                setColor(palette.subCardBg)
+                cornerRadius = dp(12).toFloat()
+                setStroke(dp(1), palette.subCardStroke)
+            }
+            visibility = if (savedStaticZoomEnabled) View.VISIBLE else View.GONE
+        }
+
+        val staticZoomSpeedTitleTv = TextView(this).apply {
+            text = getString(R.string.static_zoom_speed_title)
+            setTextColor(palette.accent)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setPadding(0, 0, 0, dp(10))
+        }
+
+        val staticZoomSpeedRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val zoomSpeedOptions = listOf(
+            Pair(8, getString(R.string.static_zoom_speed_fast)),
+            Pair(12, getString(R.string.static_zoom_speed_medium)),
+            Pair(18, getString(R.string.static_zoom_speed_slow))
+        )
+        val zoomSpeedButtons = mutableListOf<Pair<Int, TextView>>()
+
+        fun styleZoomSpeedButtons(selectedSec: Int) {
+            for ((sec, tv) in zoomSpeedButtons) {
+                val isSelected = (sec == selectedSec)
+                tv.setTextColor(if (isSelected) palette.accentOnPrimary else palette.bodyText)
+                tv.typeface = if (isSelected) Typeface.create("sans-serif-medium", Typeface.BOLD) else Typeface.DEFAULT
+                tv.background = GradientDrawable().apply {
+                    setColor(if (isSelected) palette.accent else palette.pillUnselectedBg)
+                    cornerRadius = dp(10).toFloat()
+                    if (!isSelected) {
+                        setStroke(dp(1), palette.pillUnselectedStroke)
+                    }
+                }
+            }
+        }
+
+        zoomSpeedOptions.forEachIndexed { idx, (seconds, label) ->
+            val pill = TextView(this).apply {
+                text = label
+                gravity = Gravity.CENTER
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+                setPadding(dp(6), dp(9), dp(6), dp(9))
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    if (idx < zoomSpeedOptions.lastIndex) marginEnd = dp(8)
+                }
+                setOnClickListener {
+                    currentStaticZoomCycleSec = seconds
+                    prefs.edit().putInt("static_cover_zoom_cycle_sec", seconds).apply()
+                    styleZoomSpeedButtons(seconds)
+                    notifySettingsChanged()
+                }
+            }
+            zoomSpeedButtons.add(Pair(seconds, pill))
+            staticZoomSpeedRow.addView(pill)
+        }
+        styleZoomSpeedButtons(currentStaticZoomCycleSec)
+
+        staticZoomSpeedContainer?.addView(staticZoomSpeedTitleTv)
+        staticZoomSpeedContainer?.addView(staticZoomSpeedRow)
+
+        val staticZoomRow = createToggleRow(
+            title = getString(R.string.chk_static_zoom_title),
+            desc = getString(R.string.chk_static_zoom_desc),
+            initialChecked = savedStaticZoomEnabled
+        ) { newState ->
+            prefs.edit().putBoolean("static_cover_zoom_enabled", newState).apply()
+            staticZoomSpeedContainer?.visibility = if (newState) View.VISIBLE else View.GONE
+            notifySettingsChanged()
+        }
+
         val btnResetOffset = createSecondaryButton(getString(R.string.btn_reset_pos)).apply {
             setOnClickListener {
+                currentOffsetPercent = 20
+                currentBlurPercent = 100
+                currentExpansionPercent = 0
+                currentDimPercent = 0
+                currentClockGradient = false
+                currentStaticZoomCycleSec = 12
                 seekBarPos.progress = 20
                 seekBarBlur.progress = 40
                 seekBarExpand.progress = 0
+                seekBarDim.progress = 0
+                seekBarHomeBlurBrightness.progress = 42
+                (clockGradientRow.getChildAt(1) as? CheckBox)?.isChecked = false
+                (staticZoomRow.getChildAt(1) as? CheckBox)?.isChecked = false
+                staticZoomSpeedContainer?.visibility = View.GONE
+                styleZoomSpeedButtons(12)
+                lockscreenPreview.updateParams(20, 100, 0, 0, false)
                 prefs.edit()
                     .putInt("top_offset_percent", 20)
                     .putInt("blur_strength_percent", 100)
                     .putInt("cover_expansion_percent", 0)
+                    .putInt("cover_dim_percent", 0)
+                    .putInt("home_blur_brightness_percent", 82)
+                    .putBoolean("clock_top_gradient", false)
+                    .putBoolean("static_cover_zoom_enabled", false)
+                    .putInt("static_cover_zoom_cycle_sec", 12)
                     .apply()
                 notifySettingsChanged()
             }
         }
 
         cardPos.addView(posTitle)
+        cardPos.addView(previewWrapper)
         cardPos.addView(sliderLabel)
         cardPos.addView(seekBarPos)
         cardPos.addView(blurLabel)
         cardPos.addView(seekBarBlur)
         cardPos.addView(expandLabel)
         cardPos.addView(seekBarExpand)
+        cardPos.addView(dimLabel)
+        cardPos.addView(seekBarDim)
+        cardPos.addView(clockGradientRow)
+        cardPos.addView(createSpacer(10))
+        cardPos.addView(staticZoomRow)
+        cardPos.addView(createSpacer(8))
+        cardPos.addView(staticZoomSpeedContainer)
+        cardPos.addView(createSpacer(14))
         cardPos.addView(btnResetOffset)
         rootLayout.addView(cardPos)
         rootLayout.addView(createSpacer(24))
@@ -631,11 +1187,11 @@ class MainActivity : AppCompatActivity() {
         val btnWallpaper = Button(this).apply {
             text = getString(R.string.btn_activate_wallpaper)
             isAllCaps = false
-            setTextColor(Color.parseColor("#0D0F14"))
+            setTextColor(palette.accentOnPrimary)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#8AB4F8"))
+                setColor(palette.accent)
                 cornerRadius = dp(16).toFloat()
             }
             setPadding(dp(16), dp(16), dp(16), dp(16))
@@ -681,8 +1237,220 @@ class MainActivity : AppCompatActivity() {
         updatePhotoStatusUI()
         updatePermissionStatusUI()
         updateDiagnosticUI()
+        updateCacheSizeUI()
 
         checkForGitHubUpdates(isManualCheck = false)
+    }
+
+    private class LockscreenPreviewView(
+        context: Context,
+        private val sampleDateText: String,
+        frameBorderColor: Int
+    ) : View(context) {
+
+        private var topOffsetFrac = 0.20f
+        private var blurFrac = 1.00f
+        private var expansionFrac = 0.00f
+        private var dimFrac = 0.00f
+        private var clockGradientEnabled = false
+
+        private val clipPath = Path()
+        private val frameRect = RectF()
+        private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val framePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            color = frameBorderColor
+        }
+        private val clockPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+        }
+        private val datePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#E6FFFFFF")
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+        }
+        private val pillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.parseColor("#99FFFFFF")
+        }
+
+        fun updateParams(
+            topOffsetPercent: Int,
+            blurPercent: Int,
+            expansionPercent: Int,
+            dimPercent: Int,
+            clockGradient: Boolean
+        ) {
+            topOffsetFrac = topOffsetPercent.coerceIn(0, 60) / 100f
+            blurFrac = blurPercent.coerceIn(60, 100) / 100f
+            expansionFrac = expansionPercent.coerceIn(0, 100) / 100f
+            dimFrac = dimPercent.coerceIn(0, 40) / 100f
+            clockGradientEnabled = clockGradient
+            invalidate()
+        }
+
+        private fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            val w = width.toFloat()
+            val h = height.toFloat()
+            if (w <= 0f || h <= 0f) return
+
+            val density = resources.displayMetrics.density
+            val cornerRadius = 22f * density
+            frameRect.set(0f, 0f, w, h)
+
+            canvas.save()
+            clipPath.reset()
+            clipPath.addRoundRect(frameRect, cornerRadius, cornerRadius, Path.Direction.CW)
+            canvas.clipPath(clipPath)
+
+            val blurSoftness = ((blurFrac - 0.6f) / 0.4f).coerceIn(0f, 1f)
+            val bgTopColor = Color.rgb(
+                (52 + blurSoftness * 18).toInt(),
+                (76 + blurSoftness * 16).toInt(),
+                (118 + blurSoftness * 14).toInt()
+            )
+            val bgMidColor = Color.rgb(
+                (96 + blurSoftness * 10).toInt(),
+                (64 + blurSoftness * 12).toInt(),
+                (108 + blurSoftness * 10).toInt()
+            )
+            val bgBotColor = Color.rgb(
+                (38 + blurSoftness * 12).toInt(),
+                (44 + blurSoftness * 14).toInt(),
+                (72 + blurSoftness * 14).toInt()
+            )
+            fillPaint.shader = LinearGradient(
+                0f, 0f, w, h,
+                intArrayOf(bgTopColor, bgMidColor, bgBotColor),
+                floatArrayOf(0f, 0.52f, 1f),
+                Shader.TileMode.CLAMP
+            )
+            canvas.drawRect(frameRect, fillPaint)
+            fillPaint.shader = null
+
+            val baseBoxAspect = 3f / 4f
+            val baseHeightRatio = ((w / baseBoxAspect) / h).coerceIn(0.45f, 0.68f)
+            val targetHeightRatio = lerp(baseHeightRatio, 0.95f, expansionFrac)
+            val topOffset = lerp(topOffsetFrac, 0.025f, expansionFrac)
+
+            val coverTop = topOffset * h
+            val coverHeight = targetHeightRatio * h
+            val coverBottom = coverTop + coverHeight
+
+            canvas.save()
+            canvas.clipRect(0f, coverTop, w, coverBottom)
+
+            fillPaint.shader = LinearGradient(
+                0f, coverTop, w, coverBottom,
+                intArrayOf(
+                    Color.parseColor("#5C7AEA"),
+                    Color.parseColor("#A66CFF"),
+                    Color.parseColor("#F2789F")
+                ),
+                floatArrayOf(0f, 0.55f, 1f),
+                Shader.TileMode.CLAMP
+            )
+            canvas.drawRect(0f, coverTop, w, coverBottom, fillPaint)
+            fillPaint.shader = null
+
+            val cx = w * 0.5f
+            val cy = coverTop + coverHeight * 0.5f
+            val discRadius = (w * 0.31f)
+            fillPaint.color = Color.parseColor("#33FFFFFF")
+            canvas.drawCircle(cx, cy, discRadius, fillPaint)
+            fillPaint.color = Color.parseColor("#440D0F14")
+            canvas.drawCircle(cx, cy, discRadius * 0.42f, fillPaint)
+            fillPaint.color = Color.parseColor("#99FFFFFF")
+            canvas.drawCircle(cx, cy, discRadius * 0.14f, fillPaint)
+            canvas.restore()
+
+            val fadeBand = lerp(0.11f, 0.04f, expansionFrac) * coverHeight
+            val bottomFadeBand = lerp(0.15f, 0.05f, expansionFrac) * coverHeight
+
+            if (topOffset > 0.005f) {
+                fillPaint.shader = LinearGradient(
+                    0f, coverTop - 2f, 0f, coverTop + fadeBand,
+                    bgTopColor, Color.TRANSPARENT, Shader.TileMode.CLAMP
+                )
+                canvas.drawRect(0f, coverTop - 2f, w, coverTop + fadeBand, fillPaint)
+            }
+            fillPaint.shader = LinearGradient(
+                0f, coverBottom - bottomFadeBand, 0f, coverBottom + 2f,
+                Color.TRANSPARENT, bgBotColor, Shader.TileMode.CLAMP
+            )
+            canvas.drawRect(0f, coverBottom - bottomFadeBand, w, coverBottom + 2f, fillPaint)
+            fillPaint.shader = null
+
+            if (dimFrac > 0.001f) {
+                fillPaint.color = Color.argb((dimFrac * 255f).toInt().coerceIn(0, 255), 0, 0, 0)
+                canvas.drawRect(frameRect, fillPaint)
+            }
+
+            if (clockGradientEnabled) {
+                fillPaint.shader = LinearGradient(
+                    0f, 0f, 0f, h * 0.34f,
+                    Color.argb((0.42f * 255f).toInt(), 0, 0, 0),
+                    Color.TRANSPARENT,
+                    Shader.TileMode.CLAMP
+                )
+                canvas.drawRect(0f, 0f, w, h * 0.34f, fillPaint)
+                fillPaint.shader = null
+            }
+
+            val camRadius = 3.2f * density
+            fillPaint.color = Color.parseColor("#AA0D0F14")
+            canvas.drawCircle(w * 0.5f, 10f * density, camRadius, fillPaint)
+
+            clockPaint.textSize = 27f * density
+            clockPaint.setShadowLayer(4f * density, 0f, 1.5f * density, Color.parseColor("#55000000"))
+            canvas.drawText("09:41", w * 0.5f, h * 0.21f, clockPaint)
+
+            datePaint.textSize = 8.5f * density
+            datePaint.setShadowLayer(3f * density, 0f, 1f * density, Color.parseColor("#55000000"))
+            canvas.drawText(sampleDateText, w * 0.5f, h * 0.255f, datePaint)
+
+            val pillW = w * 0.34f
+            val pillH = 2.6f * density
+            val pillTop = h - 8f * density
+            canvas.drawRoundRect(
+                RectF((w - pillW) * 0.5f, pillTop, (w + pillW) * 0.5f, pillTop + pillH),
+                pillH, pillH, pillPaint
+            )
+
+            canvas.restore()
+
+            framePaint.strokeWidth = 2f * density
+            val inset = density
+            canvas.drawRoundRect(
+                RectF(inset, inset, w - inset, h - inset),
+                cornerRadius, cornerRadius, framePaint
+            )
+        }
+    }
+
+    private fun updateCacheSizeUI() {
+        thread {
+            val totalBytes = calculateDirectorySize(File(cacheDir, "artwork_cache"))
+            val mb = totalBytes / (1024.0 * 1024.0)
+            val formatted = String.format(Locale.US, "%.1f MB", mb)
+            runOnUiThread {
+                btnClearCache?.text = getString(R.string.btn_clear_cache, formatted)
+            }
+        }
+    }
+
+    private fun calculateDirectorySize(dir: File): Long {
+        if (!dir.exists()) return 0L
+        var total = 0L
+        val files = dir.listFiles() ?: return 0L
+        for (f in files) {
+            total += if (f.isDirectory) calculateDirectorySize(f) else f.length()
+        }
+        return total
     }
 
     private fun showFaqDialog() {
@@ -704,7 +1472,7 @@ class MainActivity : AppCompatActivity() {
 
         val titleTv = TextView(this).apply {
             text = getString(R.string.faq_dialog_title)
-            setTextColor(Color.WHITE)
+            setTextColor(palette.primaryText)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             setPadding(dp(2), 0, dp(2), dp(12))
@@ -726,15 +1494,15 @@ class MainActivity : AppCompatActivity() {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(14), dp(12), dp(14), dp(12))
                 background = GradientDrawable().apply {
-                    setColor(Color.parseColor("#13161F"))
+                    setColor(palette.diagBg)
                     cornerRadius = dp(12).toFloat()
-                    setStroke(dp(1), Color.parseColor("#252B3D"))
+                    setStroke(dp(1), palette.diagStroke)
                 }
             }
 
             val qTv = TextView(this).apply {
                 text = question
-                setTextColor(Color.parseColor("#8AB4F8"))
+                setTextColor(palette.accent)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
                 typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
                 setPadding(0, 0, 0, dp(6))
@@ -742,7 +1510,7 @@ class MainActivity : AppCompatActivity() {
 
             val aTv = TextView(this).apply {
                 text = answer
-                setTextColor(Color.parseColor("#D5D9E6"))
+                setTextColor(palette.bodyText)
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
                 setLineSpacing(dp(2).toFloat(), 1.12f)
                 setTextIsSelectable(true)
@@ -755,12 +1523,12 @@ class MainActivity : AppCompatActivity() {
                 val btnCopyAdb = Button(this).apply {
                     text = getString(R.string.btn_copy_adb)
                     isAllCaps = false
-                    setTextColor(Color.parseColor("#8AB4F8"))
+                    setTextColor(palette.accent)
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
                     background = GradientDrawable().apply {
-                        setColor(Color.parseColor("#1E2433"))
+                        setColor(palette.adbBtnBg)
                         cornerRadius = dp(10).toFloat()
-                        setStroke(dp(1), Color.parseColor("#33415C"))
+                        setStroke(dp(1), palette.adbBtnStroke)
                     }
                     setPadding(dp(12), dp(8), dp(12), dp(8))
                     layoutParams = LinearLayout.LayoutParams(
@@ -796,7 +1564,7 @@ class MainActivity : AppCompatActivity() {
             .create()
 
         dialog.show()
-        styleDarkDialog(dialog)
+        styleThemeDialog(dialog)
     }
 
     private fun isGooglePixel7OrNewer(): Boolean {
@@ -821,7 +1589,7 @@ class MainActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(12), dp(12), dp(12), dp(12))
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#202431"))
+                setColor(palette.toggleRowBg)
                 cornerRadius = dp(12).toFloat()
             }
         }
@@ -835,14 +1603,14 @@ class MainActivity : AppCompatActivity() {
 
         val titleTv = TextView(this).apply {
             text = title
-            setTextColor(Color.WHITE)
+            setTextColor(palette.primaryText)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
         }
 
         val descTv = TextView(this).apply {
             text = desc
-            setTextColor(Color.parseColor("#9AA0B4"))
+            setTextColor(palette.secondaryText)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
             setPadding(0, dp(2), 0, 0)
         }
@@ -852,7 +1620,7 @@ class MainActivity : AppCompatActivity() {
 
         val chk = CheckBox(this).apply {
             isChecked = initialChecked
-            buttonTintList = ColorStateList.valueOf(Color.parseColor("#8AB4F8"))
+            buttonTintList = ColorStateList.valueOf(palette.accent)
             isClickable = false
             isFocusable = false
         }
@@ -954,7 +1722,7 @@ class MainActivity : AppCompatActivity() {
 
         val titleTv = TextView(this).apply {
             text = getString(R.string.restricted_help_title)
-            setTextColor(Color.WHITE)
+            setTextColor(palette.primaryText)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             setPadding(0, 0, 0, dp(12))
@@ -962,7 +1730,7 @@ class MainActivity : AppCompatActivity() {
 
         val msgTv = TextView(this).apply {
             text = getString(R.string.restricted_help_msg)
-            setTextColor(Color.parseColor("#E2E6F3"))
+            setTextColor(palette.bodyText)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             setLineSpacing(dp(2).toFloat(), 1.15f)
         }
@@ -986,21 +1754,21 @@ class MainActivity : AppCompatActivity() {
             .create()
 
         dialog.show()
-        styleDarkDialog(dialog)
+        styleThemeDialog(dialog)
     }
 
-    private fun styleDarkDialog(dialog: AlertDialog) {
+    private fun styleThemeDialog(dialog: AlertDialog) {
         dialog.window?.setBackgroundDrawable(GradientDrawable().apply {
-            setColor(Color.parseColor("#181B24"))
+            setColor(palette.cardBg)
             cornerRadius = dp(20).toFloat()
-            setStroke(dp(1), Color.parseColor("#2A3042"))
+            setStroke(dp(1), palette.dialogStroke)
         })
         dialog.getButton(DialogInterface.BUTTON_POSITIVE)?.apply {
-            setTextColor(Color.parseColor("#8AB4F8"))
+            setTextColor(palette.accent)
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
         }
         dialog.getButton(DialogInterface.BUTTON_NEGATIVE)?.apply {
-            setTextColor(Color.parseColor("#9AA0B4"))
+            setTextColor(palette.secondaryText)
         }
     }
 
@@ -1067,7 +1835,7 @@ class MainActivity : AppCompatActivity() {
 
                             val titleTv = TextView(this).apply {
                                 text = getString(R.string.update_dialog_title, latestTag)
-                                setTextColor(Color.WHITE)
+                                setTextColor(palette.primaryText)
                                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
                                 typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
                                 setPadding(0, 0, 0, dp(12))
@@ -1082,7 +1850,7 @@ class MainActivity : AppCompatActivity() {
 
                             val msgTv = TextView(this).apply {
                                 text = getString(R.string.update_dialog_msg, notesPreview)
-                                setTextColor(Color.parseColor("#E2E6F3"))
+                                setTextColor(palette.bodyText)
                                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
                                 setLineSpacing(dp(2).toFloat(), 1.1f)
                             }
@@ -1107,7 +1875,7 @@ class MainActivity : AppCompatActivity() {
                                 .create()
 
                             dialog.show()
-                            styleDarkDialog(dialog)
+                            styleThemeDialog(dialog)
                         }
                     } else if (isManualCheck) {
                         runOnUiThread {
@@ -1168,13 +1936,13 @@ class MainActivity : AppCompatActivity() {
                 val container = LinearLayout(this).apply {
                     orientation = LinearLayout.VERTICAL
                     gravity = Gravity.CENTER_HORIZONTAL
-                    setBackgroundColor(Color.parseColor("#181B24"))
+                    setBackgroundColor(palette.cardBg)
                     setPadding(dp(16), dp(20), dp(16), dp(8))
                 }
 
                 val dialogTitleTv = TextView(this).apply {
                     text = getString(R.string.crop_dialog_title)
-                    setTextColor(Color.WHITE)
+                    setTextColor(palette.primaryText)
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
                     typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
                     gravity = Gravity.CENTER
@@ -1183,7 +1951,7 @@ class MainActivity : AppCompatActivity() {
 
                 val hintTv = TextView(this).apply {
                     text = getString(R.string.crop_dialog_hint)
-                    setTextColor(Color.parseColor("#9AA0B4"))
+                    setTextColor(palette.secondaryText)
                     setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
                     gravity = Gravity.CENTER
                     setPadding(0, 0, 0, dp(12))
@@ -1198,7 +1966,7 @@ class MainActivity : AppCompatActivity() {
                     cropViewH = (cropViewW / screenAspect).toInt()
                 }
 
-                val cropView = InteractiveCropView(this, previewBitmap).apply {
+                val cropView = InteractiveCropView(this, previewBitmap, palette.accent).apply {
                     layoutParams = LinearLayout.LayoutParams(cropViewW, cropViewH)
                 }
 
@@ -1219,21 +1987,22 @@ class MainActivity : AppCompatActivity() {
                     .create()
 
                 dialog.show()
-                styleDarkDialog(dialog)
+                styleThemeDialog(dialog)
             }
         }
     }
 
     private class InteractiveCropView(
         context: Context,
-        private val bitmap: Bitmap
+        private val bitmap: Bitmap,
+        borderColor: Int
     ) : View(context) {
 
         private val matrix = Matrix()
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
         private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
-            color = Color.parseColor("#8AB4F8")
+            color = borderColor
             strokeWidth = 4f
         }
         private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -1467,13 +2236,13 @@ class MainActivity : AppCompatActivity() {
 
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(Color.parseColor("#181B24"))
+            setBackgroundColor(palette.cardBg)
             setPadding(dp(16), dp(20), dp(16), dp(8))
         }
 
         val titleTv = TextView(this).apply {
             text = getString(R.string.dialog_excluded_title)
-            setTextColor(Color.WHITE)
+            setTextColor(palette.primaryText)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             setPadding(dp(4), 0, dp(4), dp(12))
@@ -1481,12 +2250,12 @@ class MainActivity : AppCompatActivity() {
 
         val searchBox = EditText(this).apply {
             hint = getString(R.string.search_apps_hint)
-            setHintTextColor(Color.parseColor("#7E859B"))
-            setTextColor(Color.WHITE)
+            setHintTextColor(palette.mutedText)
+            setTextColor(palette.primaryText)
             setSingleLine(true)
             setPadding(dp(14), dp(12), dp(14), dp(12))
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#252936"))
+                setColor(palette.inputBg)
                 cornerRadius = dp(12).toFloat()
             }
         }
@@ -1510,7 +2279,7 @@ class MainActivity : AppCompatActivity() {
             .create()
 
         dialog.show()
-        styleDarkDialog(dialog)
+        styleThemeDialog(dialog)
 
         thread {
             val pm = packageManager
@@ -1557,13 +2326,13 @@ class MainActivity : AppCompatActivity() {
 
                         val nameTv = TextView(context).apply {
                             text = item.name
-                            setTextColor(Color.WHITE)
+                            setTextColor(palette.primaryText)
                             setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
                         }
 
                         val pkgTv = TextView(context).apply {
                             text = item.packageName
-                            setTextColor(Color.parseColor("#7E859B"))
+                            setTextColor(palette.mutedText)
                             setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
                         }
 
@@ -1572,7 +2341,7 @@ class MainActivity : AppCompatActivity() {
 
                         val checkBox = CheckBox(context).apply {
                             isChecked = excludedSet.contains(item.packageName)
-                            buttonTintList = ColorStateList.valueOf(Color.parseColor("#8AB4F8"))
+                            buttonTintList = ColorStateList.valueOf(palette.accent)
                             isClickable = false
                             isFocusable = false
                         }
@@ -1638,6 +2407,7 @@ class MainActivity : AppCompatActivity() {
         updatePhotoStatusUI()
         updateExcludedButtonCount()
         updateDiagnosticUI()
+        updateCacheSizeUI()
     }
 
     private fun isNotificationListenerEnabled(): Boolean {
@@ -1651,10 +2421,10 @@ class MainActivity : AppCompatActivity() {
         permStatusBadge?.apply {
             if (granted) {
                 text = getString(R.string.perm_status_ok)
-                setTextColor(Color.parseColor("#6DD58C"))
+                setTextColor(palette.badgeOk)
             } else {
                 text = getString(R.string.perm_status_missing)
-                setTextColor(Color.parseColor("#F28B82"))
+                setTextColor(palette.badgeMissing)
             }
         }
         val helpVisibility = if (granted) View.GONE else View.VISIBLE
@@ -1667,9 +2437,9 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(20), dp(20), dp(20))
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#181B24"))
+                setColor(palette.cardBg)
                 cornerRadius = dp(20).toFloat()
-                setStroke(dp(1), Color.parseColor("#262A38"))
+                setStroke(dp(1), palette.cardStroke)
             }
         }
     }
@@ -1677,7 +2447,7 @@ class MainActivity : AppCompatActivity() {
     private fun createCardTitle(title: String): TextView {
         return TextView(this).apply {
             text = title
-            setTextColor(Color.WHITE)
+            setTextColor(palette.primaryText)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
         }
@@ -1686,7 +2456,7 @@ class MainActivity : AppCompatActivity() {
     private fun createCardDescription(desc: String): TextView {
         return TextView(this).apply {
             text = desc
-            setTextColor(Color.parseColor("#9AA0B4"))
+            setTextColor(palette.secondaryText)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             setPadding(0, dp(4), 0, 0)
         }
@@ -1696,10 +2466,10 @@ class MainActivity : AppCompatActivity() {
         return Button(this).apply {
             text = label
             isAllCaps = false
-            setTextColor(Color.WHITE)
+            setTextColor(palette.secondaryBtnText)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#262B3C"))
+                setColor(palette.secondaryBtnBg)
                 cornerRadius = dp(12).toFloat()
             }
             setPadding(dp(14), dp(10), dp(14), dp(10))

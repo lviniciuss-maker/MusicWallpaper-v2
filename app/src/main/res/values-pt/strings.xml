@@ -2,6 +2,11 @@
     <string name="app_name">MusicWallpaper</string>
     <string name="app_subtitle">Capas Animadas na Tela de Bloqueio</string>
 
+    <string name="theme_selector_title">Tema do Aplicativo</string>
+    <string name="theme_system">Sistema</string>
+    <string name="theme_light">Claro</string>
+    <string name="theme_dark">Escuro</string>
+
     <string name="card_perm_title">1. Detecção de Música</string>
     <string name="card_perm_desc">Detecta mídias tocando em qualquer app do celular. Use a lista de exceção abaixo para ignorar apps específicos (como YouTube ou navegadores).</string>
     <string name="perm_status_ok">● Permissão Concedida</string>
@@ -19,21 +24,33 @@
     <string name="chk_local_only_title">Usar apenas capa da notificação (Modo Offline)</string>
     <string name="chk_local_only_desc">Ignora a busca online e usa exclusivamente a arte local enviada pela notificação do seu player de música.</string>
 
+    <string name="chk_wifi_only_title">Capas animadas apenas no Wi-Fi</string>
+    <string name="chk_wifi_only_desc">Economiza dados móveis usando capas estáticas no 4G/5G e reproduzindo vídeos .m3u8 somente conectado ao Wi-Fi.</string>
+
+    <string name="chk_battery_saver_title">Pausar animações em Economia de Bateria</string>
+    <string name="chk_battery_saver_desc">Congela automaticamente capas animadas em um quadro nítido enquanto o modo Economia de Bateria do Android estiver ativo.</string>
+
     <string name="chk_pixel_colors_title">Cores Dinâmicas da Capa (Exclusivo Pixel 7+)</string>
     <string name="chk_pixel_colors_desc">Extrai as cores Material You da capa apenas na Tela de Bloqueio (intervalo de 1 min para proteger a CPU).</string>
 
-    <string name="diag_box_title">🔍 Última Mídia Detectada (Toque p/ copiar)</string>
+    <string name="btn_clear_cache">🗑️ Limpar Cache de Capas (%1$s)</string>
+    <string name="toast_cache_cleared">Cache de capas limpo com sucesso!</string>
+
+    <string name="diag_header_collapsed">🔍 Diagnóstico de Mídia ▾</string>
+    <string name="diag_header_expanded">🔍 Diagnóstico de Mídia ▴</string>
+    <string name="diag_copy_hint">Toque no texto abaixo para copiar os metadados</string>
     <string name="diag_box_empty">Nenhuma música detectada ainda. Coloque uma música para tocar para inspecionar os metadados enviados pelo player.</string>
     <string name="toast_diag_copied">Metadados de diagnóstico copiados!</string>
 
     <string name="card_photo_title">2. Papéis de Parede (Bloqueio e Inicial)</string>
-    <string name="card_photo_desc">A foto de espera da tela de bloqueio é exibida automaticamente 5 segundos após pausar a música.</string>
+    <string name="card_photo_desc">A foto de espera da tela de bloqueio é exibida automaticamente após pausar a música.</string>
     <string name="btn_pick_photo">Escolher Foto da Tela de Bloqueio</string>
     <string name="status_photo_ok">✅ Foto da tela de bloqueio ativa</string>
     <string name="status_photo_none">ℹ️ Nenhuma foto escolhida ainda</string>
     <string name="chooser_title">Escolha uma foto</string>
     <string name="toast_photo_saved">Papel de parede salvo com sucesso!</string>
 
+    <string name="pause_delay_title">Tempo de espera ao pausar</string>
     <string name="chk_keep_cover_title">Manter última capa quando a música parar</string>
     <string name="chk_keep_cover_desc">Ignora a foto de espera ao pausar e mantém a última capa (animada ou estática) ativa na tela de bloqueio.</string>
 
@@ -42,6 +59,7 @@
     <string name="home_photo_section_title">Aparência da Tela Inicial</string>
     <string name="chk_home_blur_title">Usar difusão (Blur) da capa na Tela Inicial</string>
     <string name="chk_home_blur_desc">Preenche a Tela Inicial com o efeito difuso suavizado da capa do álbum atual, sem atrapalhar a leitura dos ícones e widgets.</string>
+    <string name="home_blur_brightness_format">Brilho da Difusão na Tela Inicial: %1$d%%</string>
     <string name="home_blur_photo_section_title">Foto da Tela Inicial (quando a música parar)</string>
     <string name="btn_pick_home_blur_photo">Escolher Foto de Espera da Tela Inicial</string>
     <string name="status_home_blur_photo_ok">✅ Foto de espera da tela inicial ativa</string>
@@ -50,10 +68,21 @@
     <string name="status_home_photo_none">ℹ️ Usando a foto de espera como padrão</string>
 
     <string name="card_pos_title">3. Ajustes da Capa e Blur</string>
+    <string name="preview_caption">Prévia da Tela de Bloqueio</string>
+    <string name="preview_date_sample">Sáb, 21 Nov</string>
     <string name="pos_label_format">Posição Vertical (do topo): %1$d%%</string>
     <string name="blur_label_format">Intensidade do Blur: %1$d%%</string>
     <string name="expand_label_format">Expansão da Capa (até 95%% da tela): %1$d%%</string>
-    <string name="btn_reset_pos">Restaurar Padrão (20% Pos | 100% Blur | 0% Exp)</string>
+    <string name="dim_label_format">Escurecimento da Capa (Dimmer): %1$d%%</string>
+    <string name="chk_clock_gradient_title">Sombra superior para o relógio</string>
+    <string name="chk_clock_gradient_desc">Aplica um degradê escuro suave no topo da Tela de Bloqueio para melhorar a leitura do relógio em capas claras.</string>
+    <string name="chk_static_zoom_title">Animação suave em capas estáticas (Zoom)</string>
+    <string name="chk_static_zoom_desc">Aplica um efeito lento de aproximação e afastamento quando o álbum não possui capa animada.</string>
+    <string name="static_zoom_speed_title">Velocidade da animação de zoom</string>
+    <string name="static_zoom_speed_fast">Rápida (8s)</string>
+    <string name="static_zoom_speed_medium">Média (12s)</string>
+    <string name="static_zoom_speed_slow">Lenta (18s)</string>
+    <string name="btn_reset_pos">Restaurar Ajustes Padrão</string>
 
     <string name="btn_activate_wallpaper">Ativar Papel de Parede</string>
     <string name="toast_error_generic">Não foi possível abrir a tela do sistema</string>
@@ -92,7 +121,7 @@
     <string name="faq_a5">No Cartão 1 (Detecção de Música), toque em \"Apps Ignorados\" e marque os aplicativos de vídeo, redes sociais ou navegadores que você não deseja monitorar.</string>
 
     <string name="faq_q6">6. Por que algumas músicas ficam estáticas ou demoram alguns segundos no Wi-Fi lento?</string>
-    <string name="faq_a6">Nem todos os álbuns possuem arte animada oficial na Apple Music. Quando não há vídeo, o app baixa a capa estática 1000x1000 ou usa a arte da notificação. Em conexões lentas, a capa anterior continua fluindo na tela enquanto uma segunda verificação automática após 4 segundos garante o carregamento.</string>
+    <string name="faq_a6">Nem todos os álbuns possuem arte animada oficial na Apple Music. Quando não há vídeo, o app baixa a capa estática 1000x1000 ou usa a arte da notificação. Em conexões lentas, a capa anterior continua fluindo na tela enquanto checagens automáticas em 2s e 4s garantem o carregamento.</string>
 
     <string name="faq_q7">7. Manter a capa animada ao pausar ou usar a Difusão na Tela Inicial gasta muita bateria?</string>
     <string name="faq_a7">Não. O vídeo (ExoPlayer) e o blur na GPU pausam automaticamente quando a tela apaga. Na Tela Inicial com Difusão ativa, a transição dura 260ms e o vídeo pausa logo em seguida, mantendo o consumo praticamente nulo.</string>
