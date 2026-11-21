@@ -27,7 +27,7 @@ MusicWallpaper detects media playing from any music app on your Android device (
 
 ## ✨ Features / Recursos
 
-- **Animated `.m3u8` & High-Res Static Artwork:** Fetches official vertical 3:4 animated covers (with direct Apple Music fallback), `1000x1000` static covers from iTunes, or uses your player's local notification artwork (Offline Mode).
+- **Animated `.m3u8` & High-Res Static Artwork:** Fetches official vertical 3:4 animated covers, `1000x1000` static covers from iTunes, or uses your player's local notification artwork (Offline Mode).
 - **350ms GPU Crossfade & Multi-Stage Verification:** Smooth dissolve transitions between tracks with a 9-point bitmap signature tracker and automatic **2s and 4s** verifications for delayed player notifications and slow Wi-Fi.
 - **GPU-Accelerated Multi-Pass Gaussian Blur & Live Preview:** Customize **Vertical Position (0%–60%)**, **Blur Intensity**, **Cover Expansion (up to 95%)**, **Cover Dimming (0%–40%)**, and **Top Clock Shadow** with an interactive real-time Lockscreen preview inside the app.
 - **Subtle Zoom Animation on Static Covers (Optional):** Gentle *Ken Burns* breathing effect (`1.00x` ↔ `1.06x`) with 3 speeds (**Fast 8s**, **Medium 12s**, **Slow 18s**), capped at 30 FPS with zero blur recalculation overhead.
