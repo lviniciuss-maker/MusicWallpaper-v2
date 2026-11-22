@@ -16,6 +16,13 @@
     <string name="restricted_help_title">Liberar Configuração Restrita (Android 13+)</string>
     <string name="restricted_help_msg">Ao instalar o APK fora da Play Store, o Android bloqueia o Acesso a Notificações por padrão:\n\n1. Toque primeiro em \"Configurar Permissão\" e toque em MusicWallpaper (aparecerá o aviso de Configuração Restrita — toque em OK).\n\n2. Toque no botão \"Abrir Informações do App\" abaixo, vá nos 3 pontinhos (⋮) no canto superior direito e selecione \"Permitir configurações restritas\".\n\n3. Volte aqui e ative em \"Configurar Permissão\" normalmente!</string>
     <string name="btn_open_app_info">Abrir Informações do App</string>
+    <string name="chk_update_notif_title">Avisar quando houver nova atualização</string>
+    <string name="chk_update_notif_desc">Verifica o GitHub 1x por dia em segundo plano e envia apenas uma notificação por nova versão.</string>
+    <string name="toast_notif_perm_denied">Permissão de notificação negada. Os avisos foram desativados.</string>
+    <string name="notif_channel_updates_name">Atualizações do App</string>
+    <string name="notif_channel_updates_desc">Avisa uma única vez quando uma nova versão do MusicWallpaper sair no GitHub.</string>
+    <string name="notif_update_title">🚀 MusicWallpaper v%1$s disponível!</string>
+    <string name="notif_update_body">Toque para baixar o novo APK direto do GitHub.</string>
     <string name="btn_excluded_apps">Apps Ignorados (%1$d)</string>
     <string name="dialog_excluded_title">Escolha os Apps para Ignorar</string>
     <string name="search_apps_hint">Pesquisar aplicativo...</string>

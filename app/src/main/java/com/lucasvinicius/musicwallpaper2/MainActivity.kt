@@ -1,5 +1,6 @@
 package com.lucasvinicius.musicwallpaper2
 
+import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.WallpaperManager
@@ -11,6 +12,7 @@ import android.content.Context
 import android.content.DialogInterface
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Bitmap
@@ -55,6 +57,7 @@ import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import org.json.JSONObject
@@ -107,6 +110,7 @@ class MainActivity : AppCompatActivity() {
     private var permStatusBadge: TextView? = null
     private var btnRestrictedHelp: Button? = null
     private var restrictedHelpSpacer: View? = null
+    private var updateNotifyCheckBox: CheckBox? = null
     private var btnExcludedApps: Button? = null
     private var btnClearCache: Button? = null
     private var diagBodyTv: TextView? = null
@@ -129,6 +133,7 @@ class MainActivity : AppCompatActivity() {
     private val pickLockscreenImageRequest = 1001
     private val pickHomeImageRequest = 1002
     private val pickHomeBlurImageRequest = 1003
+    private val requestPostNotificationsCode = 2001
 
     private val githubOwner = "lviniciuss-maker"
     private val githubRepo = "MusicWallpaper-v2"
@@ -257,6 +262,7 @@ class MainActivity : AppCompatActivity() {
             if (it in listOf(8, 12, 18)) it else 12
         }
         val savedHomeBlurBrightness = prefs.getInt("home_blur_brightness_percent", 82).coerceIn(40, 100)
+        val savedUpdateNotif = prefs.getBoolean("update_notifications_enabled", false) && hasPostNotificationsPermission()
         val savedOfflineOnly = prefs.getBoolean("offline_only_mode", false)
         val savedWifiOnlyAnimated = prefs.getBoolean("wifi_only_animated", false)
         val savedPauseOnBatterySaver = prefs.getBoolean("pause_on_battery_saver", true)
@@ -349,7 +355,7 @@ class MainActivity : AppCompatActivity() {
         rootLayout.addView(createSpacer(18))
 
         // =========================================================================
-        // CARTÃO 1: PERMISSÃO + EXCEÇÕES + OFFLINE + WI-FI + BATERIA + CACHE + DIAGNÓSTICO
+        // CARTÃO 1: PERMISSÃO + AVISO DE ATUALIZAÇÃO + EXCEÇÕES + OFFLINE + WI-FI + BATERIA + CACHE + DIAGNÓSTICO
         // =========================================================================
         val cardPerm = createCardLayout()
 
@@ -388,6 +394,29 @@ class MainActivity : AppCompatActivity() {
                 showRestrictedSettingsHelpDialog()
             }
         }
+
+        val updateNotifyRow = createToggleRow(
+            title = getString(R.string.chk_update_notif_title),
+            desc = getString(R.string.chk_update_notif_desc),
+            initialChecked = savedUpdateNotif
+        ) { newState ->
+            if (newState) {
+                if (hasPostNotificationsPermission()) {
+                    prefs.edit().putBoolean("update_notifications_enabled", true).apply()
+                    notifySettingsChanged()
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    ActivityCompat.requestPermissions(
+                        this,
+                        arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                        requestPostNotificationsCode
+                    )
+                }
+            } else {
+                prefs.edit().putBoolean("update_notifications_enabled", false).apply()
+                notifySettingsChanged()
+            }
+        }
+        updateNotifyCheckBox = updateNotifyRow.getChildAt(1) as? CheckBox
 
         btnExcludedApps = createSecondaryButton("").apply {
             setOnClickListener {
@@ -507,6 +536,8 @@ class MainActivity : AppCompatActivity() {
         cardPerm.addView(btnPermission)
         cardPerm.addView(restrictedHelpSpacer)
         cardPerm.addView(btnRestrictedHelp)
+        cardPerm.addView(createSpacer(10))
+        cardPerm.addView(updateNotifyRow)
         cardPerm.addView(createSpacer(10))
         cardPerm.addView(btnExcludedApps)
         cardPerm.addView(createSpacer(12))
@@ -1247,10 +1278,56 @@ class MainActivity : AppCompatActivity() {
 
         updatePhotoStatusUI()
         updatePermissionStatusUI()
+        syncUpdateNotificationToggle()
         updateDiagnosticUI()
         updateCacheSizeUI()
 
         checkForGitHubUpdates(isManualCheck = false)
+    }
+
+    private fun hasPostNotificationsPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+    }
+
+    private fun syncUpdateNotificationToggle() {
+        val prefs = getSharedPreferences("wallpaper_prefs", MODE_PRIVATE)
+        val enabledInPrefs = prefs.getBoolean("update_notifications_enabled", false)
+        if (enabledInPrefs && !hasPostNotificationsPermission()) {
+            prefs.edit().putBoolean("update_notifications_enabled", false).apply()
+            updateNotifyCheckBox?.isChecked = false
+            notifySettingsChanged()
+        } else {
+            updateNotifyCheckBox?.isChecked = enabledInPrefs
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == requestPostNotificationsCode) {
+            val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+            val prefs = getSharedPreferences("wallpaper_prefs", MODE_PRIVATE)
+            if (granted) {
+                prefs.edit().putBoolean("update_notifications_enabled", true).apply()
+                updateNotifyCheckBox?.isChecked = true
+                notifySettingsChanged()
+            } else {
+                prefs.edit().putBoolean("update_notifications_enabled", false).apply()
+                updateNotifyCheckBox?.isChecked = false
+                Toast.makeText(this, getString(R.string.toast_notif_perm_denied), Toast.LENGTH_SHORT).show()
+                notifySettingsChanged()
+            }
+        }
     }
 
     private fun showDonateDialog() {
@@ -2527,6 +2604,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updatePermissionStatusUI()
+        syncUpdateNotificationToggle()
         updatePhotoStatusUI()
         updateExcludedButtonCount()
         updateDiagnosticUI()

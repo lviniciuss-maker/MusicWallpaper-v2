@@ -1,13 +1,19 @@
 package com.lucasvinicius.musicwallpaper2
 
+import android.Manifest
 import android.animation.ValueAnimator
 import android.app.KeyguardManager
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.WallpaperColors
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -18,6 +24,7 @@ import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.net.Uri
 import android.opengl.EGL14
 import android.opengl.EGLConfig
 import android.opengl.EGLContext
@@ -301,6 +308,12 @@ class BlurVideoWallpaperService : WallpaperService() {
         private var homeUseAlbumBlur: Boolean = false
         private var pixelDynamicColorsEnabled: Boolean = false
 
+        // Verificação de atualização em segundo plano (1x a cada 24h, 1 notificação por versão)
+        private var updateNotificationsEnabled: Boolean = false
+        @Volatile
+        private var isBgUpdateCheckRunning: Boolean = false
+        private val bgUpdateIntervalMs = 24L * 60L * 60L * 1000L
+
         // Controle da animação suave de Zoom (1.00x <-> 1.06x) em capas estáticas (travada em ~30 FPS)
         private var currentStaticZoom = 1.0f
         private var staticZoomStartMs = 0L
@@ -476,6 +489,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                 mainHandler.removeCallbacks(activePollRunnable)
                 if (visible) {
                     loadUserPreferences()
+                    checkForBackgroundUpdateIfNeeded()
                     checkCurrentMusic()
                     syncLockAndHomeState()
                     updateStaticZoomLoopState()
@@ -738,6 +752,127 @@ class BlurVideoWallpaperService : WallpaperService() {
             keepLastCoverOnPause = prefs.getBoolean("keep_last_cover_on_pause", false)
             homeUseAlbumBlur = prefs.getBoolean("home_use_album_blur", false)
             pixelDynamicColorsEnabled = prefs.getBoolean("pixel_dynamic_colors", false)
+            updateNotificationsEnabled = prefs.getBoolean("update_notifications_enabled", false)
+        }
+
+        private fun checkForBackgroundUpdateIfNeeded() {
+            if (!updateNotificationsEnabled || isBgUpdateCheckRunning) return
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val granted = ContextCompat.checkSelfPermission(
+                    this@BlurVideoWallpaperService,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+                if (!granted) return
+            }
+
+            val prefs = getSharedPreferences("wallpaper_prefs", MODE_PRIVATE)
+            val now = System.currentTimeMillis()
+            val lastCheck = prefs.getLong("last_bg_update_check_ms", 0L)
+            if (now - lastCheck < bgUpdateIntervalMs) return
+
+            isBgUpdateCheckRunning = true
+            prefs.edit().putLong("last_bg_update_check_ms", now).apply()
+
+            thread {
+                try {
+                    val currentVersion = try {
+                        packageManager.getPackageInfo(packageName, 0).versionName ?: "1.0"
+                    } catch (_: Throwable) {
+                        "1.0"
+                    }
+
+                    val url = URL("https://api.github.com/repos/lviniciuss-maker/MusicWallpaper-v2/releases/latest")
+                    val conn = (url.openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 6000
+                        readTimeout = 6000
+                        setRequestProperty("Accept", "application/vnd.github+json")
+                        setRequestProperty("User-Agent", "MusicWallpaper-Android")
+                    }
+
+                    if (conn.responseCode in 200..299) {
+                        val json = JSONObject(conn.inputStream.bufferedReader().readText())
+                        val latestTag = json.optString("tag_name", "").removePrefix("v").removePrefix("V").trim()
+                        val releaseUrl = json.optString("html_url", "https://github.com/lviniciuss-maker/MusicWallpaper-v2/releases")
+
+                        var downloadUrl = releaseUrl
+                        val assets = json.optJSONArray("assets")
+                        if (assets != null) {
+                            for (i in 0 until assets.length()) {
+                                val assetObj = assets.getJSONObject(i)
+                                val browserUrl = assetObj.optString("browser_download_url", "")
+                                if (browserUrl.endsWith(".apk", ignoreCase = true)) {
+                                    downloadUrl = browserUrl
+                                    break
+                                }
+                            }
+                        }
+
+                        val lastNotifiedTag = prefs.getString("last_notified_update_tag", "") ?: ""
+                        if (latestTag.isNotEmpty() && isNewerVersionName(currentVersion, latestTag) && lastNotifiedTag != latestTag) {
+                            prefs.edit().putString("last_notified_update_tag", latestTag).apply()
+                            showUpdateAvailableNotification(latestTag, downloadUrl)
+                        }
+                    }
+                } catch (_: Throwable) {
+                } finally {
+                    isBgUpdateCheckRunning = false
+                }
+            }
+        }
+
+        private fun isNewerVersionName(current: String, latest: String): Boolean {
+            val cleanCurr = current.replace(Regex("[^0-9.]"), "")
+            val cleanLate = latest.replace(Regex("[^0-9.]"), "")
+            if (cleanCurr.isEmpty() || cleanLate.isEmpty()) return false
+
+            val currParts = cleanCurr.split(".").map { it.toIntOrNull() ?: 0 }
+            val lateParts = cleanLate.split(".").map { it.toIntOrNull() ?: 0 }
+            val maxLen = max(currParts.size, lateParts.size)
+
+            for (i in 0 until maxLen) {
+                val c = currParts.getOrElse(i) { 0 }
+                val l = lateParts.getOrElse(i) { 0 }
+                if (l > c) return true
+                if (l < c) return false
+            }
+            return false
+        }
+
+        private fun showUpdateAvailableNotification(versionTag: String, downloadUrl: String) {
+            try {
+                val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                val channelId = "musicwallpaper_updates"
+                val channel = NotificationChannel(
+                    channelId,
+                    getString(R.string.notif_channel_updates_name),
+                    NotificationManager.IMPORTANCE_DEFAULT
+                ).apply {
+                    description = getString(R.string.notif_channel_updates_desc)
+                }
+                nm.createNotificationChannel(channel)
+
+                val openApkIntent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl)).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                val pendingIntent = PendingIntent.getActivity(
+                    this@BlurVideoWallpaperService,
+                    2002,
+                    openApkIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+
+                val notification = Notification.Builder(this@BlurVideoWallpaperService, channelId)
+                    .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                    .setContentTitle(getString(R.string.notif_update_title, versionTag))
+                    .setContentText(getString(R.string.notif_update_body))
+                    .setContentIntent(pendingIntent)
+                    .setAutoCancel(true)
+                    .build()
+
+                nm.notify(2002, notification)
+            } catch (e: Throwable) {
+                Log.e("BlurWallpaper", "Erro ao exibir notificação de atualização", e)
+            }
         }
 
         private fun saveAndBroadcastDebugMetadata(
