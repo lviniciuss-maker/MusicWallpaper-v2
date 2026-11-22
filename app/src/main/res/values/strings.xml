@@ -105,6 +105,14 @@
     <string name="btn_copy_adb">📋 Copy ADB Commands</string>
     <string name="toast_adb_copied">ADB commands copied to clipboard!</string>
 
+    <string name="btn_donate">☕ Support the Project</string>
+    <string name="donate_dialog_title">☕ Support MusicWallpaper</string>
+    <string name="donate_dialog_msg">MusicWallpaper is completely free, open-source, and ad-free. If you enjoy using it and would like to buy me a coffee to help keep updates coming, any contribution is hugely appreciated!</string>
+    <string name="btn_donate_paypal">💙 Donate via PayPal</string>
+    <string name="donate_pix_title">Pix (Brazil)</string>
+    <string name="btn_copy_pix">📋 Copy Pix Key</string>
+    <string name="toast_pix_copied">Pix key copied to clipboard!</string>
+
     <string name="faq_q1">1. How do I keep the last album cover on my Lockscreen without keeping it on my Home Screen?</string>
     <string name="faq_a1">Enable both \"Keep last album cover when paused\" and \"Show music artwork on Lockscreen only\". Then pick your preferred static Home Screen photo and apply MusicWallpaper to \"Home and lock screens\". The last cover stays active only on the Lockscreen even after music stops.</string>
 

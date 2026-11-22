@@ -133,6 +133,9 @@ class MainActivity : AppCompatActivity() {
     private val githubOwner = "lviniciuss-maker"
     private val githubRepo = "MusicWallpaper-v2"
 
+    private val paypalDonateUrl = "https://www.paypal.com/donate/?business=6J6ACS6XFSFYE&no_recurring=0&currency_code=BRL"
+    private val pixDonateKey = "f73342e6-86cb-412c-aa5f-1ea2f1faf763"
+
     private val debugUpdateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == "com.lucasvinicius.musicwallpaper2.ACTION_DEBUG_METADATA_UPDATED") {
@@ -1214,7 +1217,7 @@ class MainActivity : AppCompatActivity() {
         rootLayout.addView(createSpacer(12))
 
         // =========================================================================
-        // BOTÃO DE VERIFICAR ATUALIZAÇÕES NO GITHUB + BOTÃO FAQ
+        // RODAPÉ: ATUALIZAÇÕES NO GITHUB + FAQ + APOIAR O PROJETO
         // =========================================================================
         val btnCheckUpdate = createSecondaryButton(getString(R.string.btn_check_updates, currentAppVersion)).apply {
             setOnClickListener {
@@ -1230,6 +1233,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
         rootLayout.addView(btnFaq)
+        rootLayout.addView(createSpacer(10))
+
+        val btnDonate = createSecondaryButton(getString(R.string.btn_donate)).apply {
+            setOnClickListener {
+                showDonateDialog()
+            }
+        }
+        rootLayout.addView(btnDonate)
 
         scrollView.addView(rootLayout)
         setContentView(scrollView)
@@ -1240,6 +1251,118 @@ class MainActivity : AppCompatActivity() {
         updateCacheSizeUI()
 
         checkForGitHubUpdates(isManualCheck = false)
+    }
+
+    private fun showDonateDialog() {
+        val isPortuguese = Locale.getDefault().language.equals("pt", ignoreCase = true)
+
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(22), dp(22), dp(22), dp(8))
+        }
+
+        val titleTv = TextView(this).apply {
+            text = getString(R.string.donate_dialog_title)
+            setTextColor(palette.primaryText)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setPadding(0, 0, 0, dp(10))
+        }
+
+        val msgTv = TextView(this).apply {
+            text = getString(R.string.donate_dialog_msg)
+            setTextColor(palette.bodyText)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f)
+            setLineSpacing(dp(2).toFloat(), 1.15f)
+            setPadding(0, 0, 0, dp(16))
+        }
+
+        val btnPaypal = Button(this).apply {
+            text = getString(R.string.btn_donate_paypal)
+            isAllCaps = false
+            setTextColor(palette.accentOnPrimary)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.5f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            background = GradientDrawable().apply {
+                setColor(palette.accent)
+                cornerRadius = dp(12).toFloat()
+            }
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            setOnClickListener {
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(paypalDonateUrl)))
+                } catch (_: Exception) {
+                    Toast.makeText(this@MainActivity, getString(R.string.toast_error_generic), Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        container.addView(titleTv)
+        container.addView(msgTv)
+        container.addView(btnPaypal)
+
+        if (isPortuguese) {
+            val pixCard = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(14), dp(12), dp(14), dp(12))
+                background = GradientDrawable().apply {
+                    setColor(palette.diagBg)
+                    cornerRadius = dp(12).toFloat()
+                    setStroke(dp(1), palette.diagStroke)
+                }
+            }
+
+            val pixTitleTv = TextView(this).apply {
+                text = getString(R.string.donate_pix_title)
+                setTextColor(palette.accent)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                setPadding(0, 0, 0, dp(6))
+            }
+
+            val pixKeyTv = TextView(this).apply {
+                text = pixDonateKey
+                setTextColor(palette.diagText)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+                typeface = Typeface.MONOSPACE
+                setTextIsSelectable(true)
+                setPadding(0, 0, 0, dp(10))
+            }
+
+            val btnCopyPix = Button(this).apply {
+                text = getString(R.string.btn_copy_pix)
+                isAllCaps = false
+                setTextColor(palette.accent)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                background = GradientDrawable().apply {
+                    setColor(palette.adbBtnBg)
+                    cornerRadius = dp(10).toFloat()
+                    setStroke(dp(1), palette.adbBtnStroke)
+                }
+                setPadding(dp(12), dp(9), dp(12), dp(9))
+                setOnClickListener {
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("MusicWallpaper Pix", pixDonateKey))
+                    Toast.makeText(this@MainActivity, getString(R.string.toast_pix_copied), Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            pixCard.addView(pixTitleTv)
+            pixCard.addView(pixKeyTv)
+            pixCard.addView(btnCopyPix)
+
+            container.addView(createSpacer(14))
+            container.addView(pixCard)
+        }
+
+        val dialog = AlertDialog.Builder(this)
+            .setView(container)
+            .setPositiveButton(getString(R.string.btn_done)) { d, _ -> d.dismiss() }
+            .create()
+
+        dialog.show()
+        styleThemeDialog(dialog)
     }
 
     private class LockscreenPreviewView(

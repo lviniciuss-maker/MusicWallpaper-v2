@@ -105,6 +105,14 @@
     <string name="btn_copy_adb">📋 Copiar Comandos ADB</string>
     <string name="toast_adb_copied">Comandos ADB copiados!</string>
 
+    <string name="btn_donate">☕ Apoiar o Projeto</string>
+    <string name="donate_dialog_title">☕ Apoiar o MusicWallpaper</string>
+    <string name="donate_dialog_msg">O MusicWallpaper é totalmente gratuito, open-source e sem anúncios. Se você curte o app e quiser pagar um café para ajudar a manter as atualizações, qualquer apoio é muito bem-vindo!</string>
+    <string name="btn_donate_paypal">💙 Doar via PayPal</string>
+    <string name="donate_pix_title">Pix (Brasil — Chave Aleatória)</string>
+    <string name="btn_copy_pix">📋 Copiar Chave Pix</string>
+    <string name="toast_pix_copied">Chave Pix copiada!</string>
+
     <string name="faq_q1">1. Como mantenho a última capa do álbum na Tela de Bloqueio sem que ela permaneça na Tela Inicial?</string>
     <string name="faq_a1">Ative \"Manter última capa quando a música parar\" e também \"Exibir música apenas na Tela de Bloqueio\". Escolha a foto fixa desejada para a Tela Inicial e aplique o MusicWallpaper em \"Tela inicial e tela de bloqueio\". Assim, a última capa continua ativa só na Tela de Bloqueio mesmo após a música parar.</string>
 
