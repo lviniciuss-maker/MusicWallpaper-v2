@@ -10,11 +10,14 @@
 
 ---
 
-**IF YOU WANT TO BUY ME A COFFEE ☕**
+## ☕ Support the Project / Apoie o Projeto
 
-- PIX (BRAZILIAN): f73342e6-86cb-412c-aa5f-1ea2f1faf763
+MusicWallpaper is free, open-source, and ad-free. If you enjoy using it and want to buy me a coffee to support future updates:
 
-- PAYPAL: https://www.paypal.com/donate/?business=6J6ACS6XFSFYE&no_recurring=0&currency_code=BRL
+- **Global (PayPal):** [![Donate via PayPal](https://img.shields.io/badge/PayPal-Donate-00457C?style=for-the-badge&logo=paypal&logoColor=white)](https://www.paypal.com/donate/?business=6J6ACS6XFSFYE&no_recurring=0&currency_code=BRL)
+- **Brasil (Pix — Chave Aleatória):** `f73342e6-86cb-412c-aa5f-1ea2f1faf763`
+
+---
 
 # 🎵 MusicWallpaper
 
