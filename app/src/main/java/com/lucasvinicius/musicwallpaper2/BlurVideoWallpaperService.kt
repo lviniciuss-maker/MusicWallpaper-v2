@@ -67,6 +67,13 @@ import kotlin.math.max
 
 class BlurVideoWallpaperService : WallpaperService() {
 
+    private data class ItunesCandidate(
+        val albumName: String,
+        val collectionViewUrl: String,
+        val artworkUrl: String,
+        val score: Int
+    )
+
     private val m3u8Cache = ConcurrentHashMap<String, String>()
     private val m3u8Timestamps = ConcurrentHashMap<String, Long>()
     private val staticCoverCache = ConcurrentHashMap<String, Bitmap>()
@@ -1481,9 +1488,23 @@ class BlurVideoWallpaperService : WallpaperService() {
             }
         }
 
+        // =========================================================================
+        // MOTOR DE MATCHING E RANKING DE EDIÇÕES / VERSÕES (v2.0.3)
+        // =========================================================================
+
+        private fun normalizeFull(text: String): String {
+            return text.lowercase().replace(Regex("[^a-z0-9가-힣一-龯ぁ-んァ-ン]"), "")
+        }
+
+        private fun normalizeBase(text: String): String {
+            return text.replace(Regex("""\s*[(\[].*?[)\]]"""), "")
+                .lowercase()
+                .replace(Regex("[^a-z0-9가-힣一-龯ぁ-んァ-ン]"), "")
+        }
+
         private fun isArtistMatch(expectedArtist: String, returnedArtist: String): Boolean {
-            val exp = expectedArtist.lowercase().replace(Regex("[^a-z0-9가-힣一-龯ぁ-んァ-ン]"), "")
-            val ret = returnedArtist.lowercase().replace(Regex("[^a-z0-9가-힣一-龯ぁ-んァ-ン]"), "")
+            val exp = normalizeFull(expectedArtist)
+            val ret = normalizeFull(returnedArtist)
             if (exp.isEmpty() || ret.isEmpty()) return true
             if (ret.contains(exp) || exp.contains(ret)) return true
             if ((exp.contains("kanyewest") || exp == "ye") && (ret.contains("kanyewest") || ret == "ye")) return true
@@ -1491,12 +1512,66 @@ class BlurVideoWallpaperService : WallpaperService() {
         }
 
         private fun isTextMatch(expected: String, returned: String): Boolean {
-            val cleanExp = expected.replace(Regex("""\s*[(\[].*?[)\]]"""), "")
-                .lowercase().replace(Regex("[^a-z0-9가-힣一-龯ぁ-んァ-ン]"), "")
-            val cleanRet = returned.replace(Regex("""\s*[(\[].*?[)\]]"""), "")
-                .lowercase().replace(Regex("[^a-z0-9가-힣一-龯ぁ-んァ-ン]"), "")
+            val cleanExp = normalizeBase(expected)
+            val cleanRet = normalizeBase(returned)
             if (cleanExp.isEmpty() || cleanRet.isEmpty()) return false
             return cleanRet.contains(cleanExp) || cleanExp.contains(cleanRet)
+        }
+
+        private fun extractSecondaryArtists(rawArtist: String): List<String> {
+            val parts = rawArtist.split(Regex("""\s*(?:,|&|\bfeat\.?|\bft\.?|\bwith\b|/)\s*""", RegexOption.IGNORE_CASE))
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+            if (parts.size <= 1) return emptyList()
+            return parts.drop(1).map { normalizeFull(it) }.filter { it.length >= 2 }
+        }
+
+        private fun extractEditionQualifiers(album: String, title: String): List<String> {
+            val qualifiers = linkedSetOf<String>()
+            val ignoredTokens = setOf(
+                "explicit", "clean", "single", "ep", "album", "explicitversion", "cleanversion",
+                "remaster", "remastered", "audio", "officialaudio", "officialvideo", "lyrics"
+            )
+
+            fun addIfMeaningful(raw: String) {
+                val trimmed = raw.trim()
+                if (trimmed.isEmpty()) return
+                val lower = trimmed.lowercase()
+                if (lower.startsWith("feat") || lower.startsWith("ft.") || lower.startsWith("ft ") || lower.startsWith("with ")) {
+                    return
+                }
+                val norm = normalizeFull(trimmed)
+                if (norm.length >= 3 && norm !in ignoredTokens && !norm.matches(Regex("""^(19|20)\d{2}$"""))) {
+                    qualifiers.add(norm)
+                }
+            }
+
+            // Subtítulos após ":" ou " - " no nome do álbum (ex: "Midnight Sun: Girls Trip")
+            if (album.contains(":")) {
+                addIfMeaningful(album.substringAfter(":"))
+            }
+            if (album.contains(" - ")) {
+                addIfMeaningful(album.substringAfter(" - "))
+            }
+
+            // Qualificadores entre parênteses/colchetes no álbum e no título (ex: "(Girls Trip)", "(Deluxe)")
+            val parenRegex = Regex("""[(\[]([^)\]]+)[)\]]""")
+            for (src in listOf(album, title)) {
+                for (match in parenRegex.findAll(src)) {
+                    addIfMeaningful(match.groupValues[1])
+                }
+            }
+
+            return qualifiers.toList()
+        }
+
+        private fun hasStrongVariantMarker(text: String): Boolean {
+            val lower = text.lowercase()
+            val markers = listOf(
+                "remix", "acoustic", "live", "slowed", "sped up", "instrumental",
+                "karaoke", "nightcore", "8d", "mashup", "cover", "tribute", "dub mix"
+            )
+            return markers.any { lower.contains(it) }
         }
 
         private fun fetchCoverForTrack(
@@ -1510,9 +1585,10 @@ class BlurVideoWallpaperService : WallpaperService() {
             isSearchInProgress = true
             thread {
                 try {
-                    val cleanArtist = artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: artist
+                    val primaryArtist = artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: artist
                     val cleanTitle = title.replace(Regex("""\s*[(\[].*?[)\]]"""), "").trim()
                     val cleanAlbum = album.replace(Regex("""\s*[(\[].*?[)\]]"""), "").trim()
+                    val editionQualifiers = extractEditionQualifiers(album, title)
 
                     val blockAnimated = shouldBlockAnimatedForNetwork()
 
@@ -1526,9 +1602,9 @@ class BlurVideoWallpaperService : WallpaperService() {
                             hasUpdatedCoverForCurrentTrack = true
                             cancelDelayedVerifications()
                             saveAndBroadcastDebugMetadata(
-                                parsedArtist = cleanArtist,
-                                parsedAlbum = cleanAlbum,
-                                parsedTitle = cleanTitle,
+                                parsedArtist = primaryArtist,
+                                parsedAlbum = album.ifEmpty { cleanAlbum },
+                                parsedTitle = title.ifEmpty { cleanTitle },
                                 status = if (blockAnimated) "💾 Static (Disk Cache - Wi-Fi Only)" else "💾 Static (Disk Cache)"
                             )
                             updateCoverColorsForPixelLockscreen(diskStatic)
@@ -1537,7 +1613,7 @@ class BlurVideoWallpaperService : WallpaperService() {
                         return@thread
                     }
 
-                    val encArtist = URLEncoder.encode(cleanArtist, "UTF-8")
+                    val encArtist = URLEncoder.encode(primaryArtist, "UTF-8")
 
                     var m3u8Found: String? = null
                     var m3u8SourceLabel = when (retryStage) {
@@ -1545,45 +1621,49 @@ class BlurVideoWallpaperService : WallpaperService() {
                         2 -> "Plan A (Retry 4s)"
                         else -> "Plan A (3:4 API)"
                     }
-                    var itunesMatch: Triple<String, String, String>? = null
+                    var itunesMatch: ItunesCandidate? = null
 
                     if (!blockAnimated) {
                         if (cleanAlbum.isNotEmpty()) {
                             val encAlbum = URLEncoder.encode(cleanAlbum, "UTF-8")
                             m3u8Found = requestM3u8FromEndpoint(
                                 "https://artwork.m8tec.top/api/v1/artwork/search?artist=$encArtist&album=$encAlbum",
-                                cleanArtist,
-                                cleanAlbum
+                                primaryArtist,
+                                album.ifEmpty { cleanAlbum },
+                                editionQualifiers
                             )
                         }
 
                         if (m3u8Found == null && cleanTitle.isNotEmpty() && !cleanTitle.equals(cleanAlbum, ignoreCase = true)) {
-                            val encTitle = URLEncoder.encode(cleanTitle, "UTF-8")
+                            val queryTitleForApi = if (editionQualifiers.isNotEmpty()) title else cleanTitle
+                            val encTitle = URLEncoder.encode(queryTitleForApi, "UTF-8")
                             m3u8Found = requestM3u8FromEndpoint(
                                 "https://artwork.m8tec.top/api/v1/artwork/search?artist=$encArtist&album=$encTitle",
-                                cleanArtist,
-                                cleanTitle
+                                primaryArtist,
+                                title.ifEmpty { cleanTitle },
+                                editionQualifiers
                             )
                         }
 
                         if (m3u8Found == null) {
-                            itunesMatch = queryItunesCatalog(cleanArtist, cleanAlbum, cleanTitle)
-                            val officialAlbumName = itunesMatch?.first ?: ""
+                            itunesMatch = queryItunesCatalog(artist, primaryArtist, album, title)
+                            val officialAlbumName = itunesMatch?.albumName ?: ""
                             if (officialAlbumName.isNotEmpty() && !officialAlbumName.equals(cleanAlbum, ignoreCase = true)) {
                                 val encItunesAlbum = URLEncoder.encode(officialAlbumName, "UTF-8")
                                 m3u8Found = requestM3u8FromEndpoint(
                                     "https://artwork.m8tec.top/api/v1/artwork/search?artist=$encArtist&album=$encItunesAlbum",
-                                    cleanArtist,
-                                    officialAlbumName
+                                    primaryArtist,
+                                    officialAlbumName,
+                                    editionQualifiers
                                 )
                             }
                         }
 
                         if (m3u8Found == null) {
                             if (itunesMatch == null) {
-                                itunesMatch = queryItunesCatalog(cleanArtist, cleanAlbum, cleanTitle)
+                                itunesMatch = queryItunesCatalog(artist, primaryArtist, album, title)
                             }
-                            val collectionViewUrl = itunesMatch?.second ?: ""
+                            val collectionViewUrl = itunesMatch?.collectionViewUrl ?: ""
                             if (collectionViewUrl.isNotEmpty()) {
                                 m3u8Found = extractM3u8FromAppleMusicPage(collectionViewUrl)
                                 if (m3u8Found != null) {
@@ -1610,18 +1690,18 @@ class BlurVideoWallpaperService : WallpaperService() {
                             hasUpdatedCoverForCurrentTrack = true
                             cancelDelayedVerifications()
                             saveAndBroadcastDebugMetadata(
-                                parsedArtist = cleanArtist,
-                                parsedAlbum = cleanAlbum,
-                                parsedTitle = cleanTitle,
+                                parsedArtist = primaryArtist,
+                                parsedAlbum = album.ifEmpty { cleanAlbum },
+                                parsedTitle = title.ifEmpty { cleanTitle },
                                 status = "✅ Animated ($finalSourceLabel)"
                             )
                             startVideoPlayback(finalUrl)
                         }
                     } else {
                         if (itunesMatch == null) {
-                            itunesMatch = queryItunesCatalog(cleanArtist, cleanAlbum, cleanTitle)
+                            itunesMatch = queryItunesCatalog(artist, primaryArtist, album, title)
                         }
-                        val highResArtUrl = itunesMatch?.third ?: ""
+                        val highResArtUrl = itunesMatch?.artworkUrl ?: ""
                         val downloadedStatic = if (highResArtUrl.isNotEmpty()) {
                             downloadBitmapFromUrl(highResArtUrl)
                         } else {
@@ -1645,9 +1725,9 @@ class BlurVideoWallpaperService : WallpaperService() {
                                     else -> "🖼️ Static (iTunes 1000x1000)"
                                 }
                                 saveAndBroadcastDebugMetadata(
-                                    parsedArtist = cleanArtist,
-                                    parsedAlbum = cleanAlbum,
-                                    parsedTitle = cleanTitle,
+                                    parsedArtist = primaryArtist,
+                                    parsedAlbum = album.ifEmpty { cleanAlbum },
+                                    parsedTitle = title.ifEmpty { cleanTitle },
                                     status = staticStatus
                                 )
                                 updateCoverColorsForPixelLockscreen(safeOnlineStatic)
@@ -1660,9 +1740,9 @@ class BlurVideoWallpaperService : WallpaperService() {
                                     else -> "📱 Static (Notification Fallback - Waiting 2s/4s check)"
                                 }
                                 saveAndBroadcastDebugMetadata(
-                                    parsedArtist = cleanArtist,
-                                    parsedAlbum = cleanAlbum,
-                                    parsedTitle = cleanTitle,
+                                    parsedArtist = primaryArtist,
+                                    parsedAlbum = album.ifEmpty { cleanAlbum },
+                                    parsedTitle = title.ifEmpty { cleanTitle },
                                     status = fallbackStatus
                                 )
                                 checkCurrentMusic()
@@ -1680,31 +1760,76 @@ class BlurVideoWallpaperService : WallpaperService() {
             }
         }
 
-        private fun queryItunesCatalog(artist: String, album: String, title: String): Triple<String, String, String>? {
-            val primarySearch = fetchFromItunesEndpoint(
-                if (album.isNotEmpty()) "$artist $album" else "$artist $title",
-                artist,
-                album,
-                title
-            )
-            if (primarySearch != null) return primarySearch
-
-            if (album.isNotEmpty() && title.isNotEmpty() && !album.equals(title, ignoreCase = true)) {
-                return fetchFromItunesEndpoint("$artist $title", artist, album, title)
-            }
-            return null
-        }
-
-        private fun fetchFromItunesEndpoint(
-            queryText: String,
-            artist: String,
+        private fun queryItunesCatalog(
+            rawArtist: String,
+            primaryArtist: String,
             album: String,
             title: String
-        ): Triple<String, String, String>? {
+        ): ItunesCandidate? {
+            val secondaryArtists = extractSecondaryArtists(rawArtist)
+            val editionQualifiers = extractEditionQualifiers(album, title)
+
+            val firstQuery = if (album.isNotEmpty()) "$primaryArtist $album" else "$primaryArtist $title"
+            var bestCandidate = fetchBestItunesCandidate(
+                queryText = firstQuery,
+                primaryArtist = primaryArtist,
+                secondaryArtists = secondaryArtists,
+                album = album,
+                title = title,
+                editionQualifiers = editionQualifiers
+            )
+
+            // Se já encontramos um match de alta confiança (álbum/faixa + edição compatíveis), não precisa de 2ª chamada
+            val confidenceThreshold = if (editionQualifiers.isNotEmpty()) 130 else 80
+            if (bestCandidate != null && bestCandidate.score >= confidenceThreshold) {
+                return bestCandidate
+            }
+
+            if (album.isNotEmpty() && title.isNotEmpty() && !album.equals(title, ignoreCase = true)) {
+                val secondCandidate = fetchBestItunesCandidate(
+                    queryText = "$primaryArtist $title",
+                    primaryArtist = primaryArtist,
+                    secondaryArtists = secondaryArtists,
+                    album = album,
+                    title = title,
+                    editionQualifiers = editionQualifiers
+                )
+                if (secondCandidate != null && (bestCandidate == null || secondCandidate.score > bestCandidate.score)) {
+                    bestCandidate = secondCandidate
+                }
+            }
+
+            if (bestCandidate == null) {
+                val cleanAlbum = album.replace(Regex("""\s*[(\[].*?[)\]]"""), "").substringBefore(":").trim()
+                val cleanTitle = title.replace(Regex("""\s*[(\[].*?[)\]]"""), "").trim()
+                val fallbackQuery = if (cleanAlbum.isNotEmpty()) "$primaryArtist $cleanAlbum" else "$primaryArtist $cleanTitle"
+                if (fallbackQuery != firstQuery && fallbackQuery.isNotBlank()) {
+                    bestCandidate = fetchBestItunesCandidate(
+                        queryText = fallbackQuery,
+                        primaryArtist = primaryArtist,
+                        secondaryArtists = secondaryArtists,
+                        album = album,
+                        title = title,
+                        editionQualifiers = editionQualifiers
+                    )
+                }
+            }
+
+            return bestCandidate
+        }
+
+        private fun fetchBestItunesCandidate(
+            queryText: String,
+            primaryArtist: String,
+            secondaryArtists: List<String>,
+            album: String,
+            title: String,
+            editionQualifiers: List<String>
+        ): ItunesCandidate? {
             return try {
                 if (queryText.isBlank()) return null
                 val term = URLEncoder.encode(queryText, "UTF-8")
-                val url = URL("https://itunes.apple.com/search?term=$term&entity=song&limit=12")
+                val url = URL("https://itunes.apple.com/search?term=$term&entity=song&limit=15")
                 val conn = (url.openConnection() as HttpURLConnection).apply {
                     connectTimeout = 5000
                     readTimeout = 5000
@@ -1714,35 +1839,122 @@ class BlurVideoWallpaperService : WallpaperService() {
                 val json = JSONObject(conn.inputStream.bufferedReader().readText())
                 val results = json.optJSONArray("results") ?: return null
 
+                val expAlbumFull = normalizeFull(album)
+                val expTitleFull = normalizeFull(title)
+                val expAlbumBase = normalizeBase(album)
+                val expTitleBase = normalizeBase(title)
+                val expectedHasVariant = hasStrongVariantMarker("$album $title")
+
+                var best: ItunesCandidate? = null
+
                 for (i in 0 until results.length()) {
                     val item = results.getJSONObject(i)
-                    val foundArtist = item.optString("artistName")
-                    val foundTrack = item.optString("trackName")
-                    val foundAlbum = item.optString("collectionName")
+                    val foundArtist = item.optString("artistName", "")
+                    val foundTrack = item.optString("trackName", "")
+                    val foundAlbum = item.optString("collectionName", "")
 
-                    val artistOk = isArtistMatch(artist, foundArtist)
+                    val artistOk = isArtistMatch(primaryArtist, foundArtist)
                     val contentOk = (album.isNotEmpty() && isTextMatch(album, foundAlbum)) ||
                             (title.isNotEmpty() && isTextMatch(title, foundTrack)) ||
                             (title.isNotEmpty() && isTextMatch(title, foundAlbum))
 
-                    if (artistOk && contentOk) {
-                        val rawCollectionUrl = item.optString("collectionViewUrl", "")
-                        val cleanCollectionUrl = rawCollectionUrl.substringBefore("?")
-                        val art100 = item.optString("artworkUrl100", "")
-                        val highResArt = if (art100.isNotEmpty()) art100.replace("100x100bb", "1000x1000bb") else ""
+                    if (!artistOk || !contentOk) continue
 
-                        if (foundAlbum.isNotEmpty() || cleanCollectionUrl.isNotEmpty() || highResArt.isNotEmpty()) {
-                            return Triple(foundAlbum, cleanCollectionUrl, highResArt)
+                    val foundAlbumFull = normalizeFull(foundAlbum)
+                    val foundTrackFull = normalizeFull(foundTrack)
+                    val foundAlbumBase = normalizeBase(foundAlbum)
+                    val foundTrackBase = normalizeBase(foundTrack)
+                    val foundCombinedFull = "$foundAlbumFull $foundTrackFull"
+                    val foundArtistAndTrackFull = "${normalizeFull(foundArtist)} $foundTrackFull"
+
+                    var score = 0
+
+                    // 1. Pontuação do álbum (exato com subtítulo vale muito mais que parcial)
+                    if (expAlbumFull.isNotEmpty()) {
+                        when {
+                            foundAlbumFull == expAlbumFull -> score += 120
+                            foundAlbumFull.contains(expAlbumFull) -> score += 85
+                            expAlbumBase.isNotEmpty() && foundAlbumBase == expAlbumBase -> score += 45
+                            isTextMatch(album, foundAlbum) -> score += 25
+                        }
+                    }
+
+                    // 2. Pontuação do título da faixa (exato com parênteses vale muito mais)
+                    if (expTitleFull.isNotEmpty()) {
+                        when {
+                            foundTrackFull == expTitleFull -> score += 90
+                            foundTrackFull.contains(expTitleFull) -> score += 65
+                            expTitleBase.isNotEmpty() && foundTrackBase == expTitleBase -> score += 35
+                            isTextMatch(title, foundTrack) -> score += 20
+                        }
+                    }
+
+                    // 3. Verificação de edição/versão (ex: Girls Trip, Deluxe, Remix, Acoustic, Live)
+                    if (editionQualifiers.isNotEmpty()) {
+                        for (qual in editionQualifiers) {
+                            if (foundCombinedFull.contains(qual)) {
+                                score += 75
+                            } else {
+                                score -= 70
+                            }
+                        }
+                    } else if (!expectedHasVariant && hasStrongVariantMarker("$foundAlbum $foundTrack")) {
+                        score -= 55
+                    }
+
+                    // 4. Bônus/penalidade para artistas convidados (ex: JT, Margo XS)
+                    if (secondaryArtists.isNotEmpty()) {
+                        for (secArtist in secondaryArtists) {
+                            if (foundArtistAndTrackFull.contains(secArtist)) {
+                                score += 35
+                            } else {
+                                score -= 12
+                            }
+                        }
+                    }
+
+                    // 5. Penalizar versões karaoke/tributo quando não solicitadas
+                    val lowerFoundAll = "$foundArtist $foundAlbum $foundTrack".lowercase()
+                    if (!expectedHasVariant && (lowerFoundAll.contains("karaoke") || lowerFoundAll.contains("tribute"))) {
+                        score -= 100
+                    }
+
+                    val rawCollectionUrl = item.optString("collectionViewUrl", "")
+                    val cleanCollectionUrl = rawCollectionUrl.substringBefore("?")
+                    val art100 = item.optString("artworkUrl100", "")
+                    val highResArt = if (art100.isNotEmpty()) art100.replace("100x100bb", "1000x1000bb") else ""
+
+                    if (foundAlbum.isNotEmpty() || cleanCollectionUrl.isNotEmpty() || highResArt.isNotEmpty()) {
+                        val candidate = ItunesCandidate(
+                            albumName = foundAlbum,
+                            collectionViewUrl = cleanCollectionUrl,
+                            artworkUrl = highResArt,
+                            score = score
+                        )
+                        if (best == null || candidate.score > best.score) {
+                            best = candidate
                         }
                     }
                 }
-                null
+
+                // Se há qualificadores de edição explícitos (ex: "Girls Trip") e nenhum resultado positivo bateu,
+                // evita retornar uma capa padrão errada deixando o fallback ou a capa da notificação assumir.
+                if (best != null && editionQualifiers.isNotEmpty() && best.score < 20) {
+                    return null
+                }
+
+                best
             } catch (_: Throwable) {
                 null
             }
         }
 
-        private fun requestM3u8FromEndpoint(urlString: String, expectedArtist: String, expectedAlbumOrTitle: String): String? {
+        private fun requestM3u8FromEndpoint(
+            urlString: String,
+            expectedArtist: String,
+            expectedAlbumOrTitle: String,
+            expectedEditionQualifiers: List<String> = emptyList()
+        ): String? {
             return try {
                 val conn = (URL(urlString).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 5000
@@ -1761,7 +1973,14 @@ class BlurVideoWallpaperService : WallpaperService() {
 
                 val albumRegex = Regex(""""(?:album|albumName|album_name|collectionName|title)"\s*:\s*"([^"]+)"""")
                 val returnedAlbum = albumRegex.find(body)?.groupValues?.get(1)?.trim()
-                if (!returnedAlbum.isNullOrEmpty() && expectedAlbumOrTitle.isNotEmpty() && !isTextMatch(expectedAlbumOrTitle, returnedAlbum)) return null
+                if (!returnedAlbum.isNullOrEmpty()) {
+                    if (expectedAlbumOrTitle.isNotEmpty() && !isTextMatch(expectedAlbumOrTitle, returnedAlbum)) return null
+                    if (expectedEditionQualifiers.isNotEmpty()) {
+                        val normRetAlbum = normalizeFull(returnedAlbum)
+                        val editionMatched = expectedEditionQualifiers.any { normRetAlbum.contains(it) }
+                        if (!editionMatched) return null
+                    }
+                }
 
                 val tallFieldRegex = Regex(""""(?:url_tall|tall_url|tallUrl|editorialVideoTall)"\s*:\s*"(https:[^"]+\.m3u8)"""")
                 val tallMatch = tallFieldRegex.find(body)?.groupValues?.get(1)?.replace("\\/", "/")
@@ -2114,8 +2333,6 @@ class BlurVideoWallpaperService : WallpaperService() {
 
             val effectiveHomeAlpha = if ((lockscreenOnlyMode || homeUseAlbumBlur) && !isPreview) homeTransitionAlpha else 0f
 
-            // Em capas estáticas (displayMode == 1), o blur só roda quando a textura é nova ou forceBlurPass == true,
-            // evitando recalcular as 4 passadas do FBO durante o loop leve de 30 FPS do zoom.
             val needsBlurForCurrentFrame = when {
                 displayMode == 2 && hasVideoFrame -> (effectiveHomeAlpha < 1f || forceBlurPass || (homeUseAlbumBlur && !hasValidBlurTexture))
                 displayMode == 1 && hasStaticTexture -> (!hasValidBlurTexture || forceBlurPass)
