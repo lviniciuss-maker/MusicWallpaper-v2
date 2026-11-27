@@ -1,0 +1,165 @@
+<resources>
+    <string name="app_name">MusicWallpaper</string>
+    <string name="app_subtitle">Portadas Animadas en la Pantalla de Bloqueo</string>
+
+    <string name="theme_selector_title">Tema de la Aplicación</string>
+    <string name="theme_system">Sistema</string>
+    <string name="theme_light">Claro</string>
+    <string name="theme_dark">Oscuro</string>
+
+    <string name="card_perm_title">1. Detección de Música</string>
+    <string name="card_perm_desc">Detecta el contenido multimedia que suena en cualquier app del dispositivo. Usa la lista de excepciones para ignorar apps específicas (como YouTube o navegadores).</string>
+    <string name="perm_status_ok">● Permiso Concedido</string>
+    <string name="perm_status_missing">● Permiso Pendiente</string>
+    <string name="btn_grant_perm">Configurar Permiso</string>
+    <string name="btn_restricted_help">⚠️ ¿Bloqueado en Android 13+? Cómo desbloquear</string>
+    <string name="restricted_help_title">Desbloquear Ajuste Restringido (Android 13+)</string>
+    <string name="restricted_help_msg">Al instalar un APK fuera de Play Store, Android bloquea el Acceso a Notificaciones por defecto:\n\n1. Toca primero en \"Configurar Permiso\" y selecciona MusicWallpaper (aparecerá un aviso de Ajuste Restringido — toca OK).\n\n2. Toca \"Abrir Información de la App\" abajo, pulsa los 3 puntos (⋮) en la esquina superior derecha y selecciona \"Permitir ajustes restringidos\".\n\n3. ¡Vuelve aquí y activa \"Configurar Permiso\" normalmente!</string>
+    <string name="btn_open_app_info">Abrir Información de la App</string>
+    <string name="chk_update_notif_title">Avisar cuando haya una nueva actualización</string>
+    <string name="chk_update_notif_desc">Consulta GitHub 1 vez al día en segundo plano y envía una sola notificación por nueva versión.</string>
+    <string name="toast_notif_perm_denied">Permiso de notificaciones denegado. Los avisos fueron desactivados.</string>
+    <string name="notif_channel_updates_name">Actualizaciones de la App</string>
+    <string name="notif_channel_updates_desc">Avisa una única vez cuando se publica una nueva versión de MusicWallpaper en GitHub.</string>
+    <string name="notif_update_title">🚀 ¡MusicWallpaper v%1$s disponible!</string>
+    <string name="notif_update_body">Toca para descargar el nuevo APK directo desde GitHub.</string>
+    <string name="btn_excluded_apps">Apps Ignoradas (%1$d)</string>
+    <string name="dialog_excluded_title">Elige las Apps para Ignorar</string>
+    <string name="search_apps_hint">Buscar aplicación...</string>
+    <string name="btn_done">Listo</string>
+
+    <string name="search_mode_title">Modo de Búsqueda de Portadas</string>
+    <string name="search_mode_online">Online</string>
+    <string name="search_mode_auto">Auto</string>
+    <string name="search_mode_offline">Offline</string>
+    <string name="search_mode_desc_online">Busca siempre en línea portadas animadas oficiales (.m3u8) y artes en alta resolución.</string>
+    <string name="search_mode_desc_auto">Modo inteligente: usa la caché normalmente, pero pasa directo a la portada de la notificación en conexiones lentas o inestables.</string>
+    <string name="search_mode_desc_offline">100% Offline: omite búsquedas en línea y usa exclusivamente la portada incluida en la notificación de tu reproductor.</string>
+
+    <string name="chk_wifi_only_title">Portadas animadas solo por Wi-Fi</string>
+    <string name="chk_wifi_only_desc">Ahorra datos móviles usando portadas estáticas en 4G/5G y reproduciendo videos .m3u8 únicamente con Wi-Fi.</string>
+
+    <string name="chk_battery_saver_title">Pausar animaciones en Ahorro de Batería</string>
+    <string name="chk_battery_saver_desc">Congela automáticamente las portadas animadas en un fotograma nítido mientras el Ahorro de Batería de Android esté activo.</string>
+
+    <string name="chk_pixel_colors_title">Colores Dinámicos del Sistema (Exclusivo Pixel 7+)</string>
+    <string name="chk_pixel_colors_desc">Extrae los colores Material You de la portada solo en la Pantalla de Bloqueo (intervalo de 60s para proteger la CPU).</string>
+
+    <string name="btn_clear_cache">🗑️ Limpiar Caché de Portadas (%1$s)</string>
+    <string name="toast_cache_cleared">¡Caché de portadas limpiada!</string>
+
+    <string name="diag_header_collapsed">🔍 Diagnóstico Multimedia ▾</string>
+    <string name="diag_header_expanded">🔍 Diagnóstico Multimedia ▴</string>
+    <string name="diag_copy_hint">Toca el texto de abajo para copiar los metadatos</string>
+    <string name="diag_box_empty">Aún no se detecta música activa. Reproduce una canción en tu reproductor para inspeccionar sus metadatos.</string>
+    <string name="toast_diag_copied">¡Metadatos de diagnóstico copiados!</string>
+
+    <string name="card_photo_title">2. Fondos de Espera y Pantalla de Inicio</string>
+    <string name="card_photo_desc">La foto de espera de la pantalla de bloqueo se muestra automáticamente al pausar la música.</string>
+    <string name="btn_pick_photo">Elegir Foto de Pantalla de Bloqueo</string>
+    <string name="status_photo_ok">✅ Foto personalizada de bloqueo activa</string>
+    <string name="status_photo_none">ℹ️ Aún no se ha elegido una foto de bloqueo</string>
+    <string name="chooser_title">Selecciona una foto de fondo</string>
+    <string name="toast_photo_saved">¡Fondo de pantalla guardado con éxito!</string>
+
+    <string name="pause_delay_title">Tiempo de espera al pausar</string>
+    <string name="chk_keep_cover_title">Mantener la última portada al pausar</string>
+    <string name="chk_keep_cover_desc">Ignora el fondo de espera cuando la música se detiene y mantiene activa la última portada animada o estática.</string>
+
+    <string name="chk_lockscreen_only_title">Mostrar música solo en la Pantalla de Bloqueo</string>
+    <string name="chk_lockscreen_only_desc">Úsalo solo si tu dispositivo no permite aplicar MusicWallpaper únicamente en la pantalla de bloqueo. Elige una foto abajo y aplícalo en \"Pantalla de inicio y bloqueo\".</string>
+    <string name="home_photo_section_title">Apariencia de la Pantalla de Inicio</string>
+    <string name="chk_home_blur_title">Usar difusión (Blur) de la portada en Inicio</string>
+    <string name="chk_home_blur_desc">Rellena la Pantalla de Inicio con un desenfoque gaussiano suave y atenuado de la portada actual para facilitar la lectura de iconos.</string>
+    <string name="home_blur_brightness_format">Brillo de Difusión en Inicio: %1$d%%</string>
+    <string name="home_blur_photo_section_title">Foto de Pantalla de Inicio (sin música)</string>
+    <string name="btn_pick_home_blur_photo">Elegir Foto de Espera de Inicio</string>
+    <string name="status_home_blur_photo_ok">✅ Foto de espera de inicio activa</string>
+    <string name="btn_pick_home_photo">Elegir Foto de Pantalla de Inicio</string>
+    <string name="status_home_photo_ok">✅ Foto personalizada de inicio activa</string>
+    <string name="status_home_photo_none">ℹ️ Usando la foto de bloqueo como respaldo</string>
+
+    <string name="card_pos_title">3. Ajustes de Portada y Blur</string>
+    <string name="preview_caption">Vista Previa de Pantalla de Bloqueo</string>
+    <string name="preview_caption_home">Vista Previa de Pantalla de Inicio</string>
+    <string name="preview_date_sample">Sáb, 21 Nov</string>
+    <string name="pos_label_format">Posición Vertical (Pantalla de Bloqueo): %1$d%%</string>
+    <string name="home_pos_label_format">Posición Vertical (Pantalla de Inicio): %1$d%%</string>
+    <string name="landscape_pos_label_format">Posición Horizontal (Horizontal / Tablet): %1$d%%</string>
+    <string name="blur_label_format">Intensidad del Blur: %1$d%%</string>
+    <string name="blur_sat_label_format">Realce de Saturación en Blur: %1$d%%</string>
+    <string name="expand_label_format">Expansión de Portada (hasta 95%%): %1$d%%</string>
+    <string name="dim_label_format">Oscurecimiento de Portada (Dimmer): %1$d%%</string>
+    <string name="chk_clock_gradient_title">Sombra superior para el reloj</string>
+    <string name="chk_clock_gradient_desc">Añade un degradado oscuro sutil en la parte superior para mejorar la lectura del reloj en portadas claras.</string>
+    <string name="chk_bottom_gradient_title">Sombra inferior sutil (pie)</string>
+    <string name="chk_bottom_gradient_desc">Añade un degradado oscuro suave en el 15% inferior de la pantalla para mejorar el contraste de accesos directos, huella e información de carga.</string>
+    <string name="chk_static_zoom_title">Animación suave en portadas estáticas (Zoom)</string>
+    <string name="chk_static_zoom_desc">Aplica un efecto lento de acercamiento y alejamiento cuando un álbum no tiene portada animada.</string>
+    <string name="static_zoom_speed_title">Velocidad de animación de zoom</string>
+    <string name="static_zoom_speed_fast">Rápida (8s)</string>
+    <string name="static_zoom_speed_medium">Media (12s)</string>
+    <string name="static_zoom_speed_slow">Lenta (18s)</string>
+    <string name="static_zoom_intensity_title">Intensidad del zoom</string>
+    <string name="btn_reset_pos">Restaurar Ajustes Predeterminados</string>
+
+    <string name="btn_activate_wallpaper">Activar Fondo Animado</string>
+    <string name="toast_error_generic">No se pudo abrir la pantalla del sistema</string>
+
+    <string name="btn_export_settings">📤 Exportar (.json)</string>
+    <string name="btn_import_settings">📥 Importar (.json)</string>
+    <string name="toast_export_success">¡Configuración exportada con éxito!</string>
+    <string name="toast_export_error">No se pudo exportar la configuración.</string>
+    <string name="toast_import_success">¡Configuración importada con éxito!</string>
+    <string name="toast_import_error">Archivo de configuración inválido o ilegible.</string>
+
+    <string name="crop_dialog_title">Ajustar Recorte del Fondo</string>
+    <string name="crop_dialog_hint">Arrastra con 1 dedo para mover • Pellizca con 2 dedos para zoom</string>
+    <string name="btn_save_crop">Guardar Fondo</string>
+    <string name="btn_cancel">Cancelar</string>
+
+    <string name="btn_check_updates">Buscar Actualizaciones (v%1$s)</string>
+    <string name="update_dialog_title">🚀 Nueva Actualización Disponible (v%1$s)</string>
+    <string name="update_dialog_msg">¡Hay una nueva versión de MusicWallpaper disponible en GitHub!\n\n%1$s</string>
+    <string name="btn_download_update">Descargar APK</string>
+    <string name="btn_later">Más tarde</string>
+    <string name="toast_up_to_date">¡Ya tienes la última versión instalada (v%1$s)!</string>
+    <string name="toast_update_check_error">No se pudo consultar GitHub en este momento.</string>
+
+    <string name="btn_faq">❓ Preguntas Frecuentes (FAQ)</string>
+    <string name="faq_dialog_title">❓ Preguntas Frecuentes (FAQ)</string>
+    <string name="btn_copy_adb">📋 Copiar Comandos ADB</string>
+    <string name="toast_adb_copied">¡Comandos ADB copiados al portapapeles!</string>
+
+    <string name="btn_donate">☕ Apoyar el Proyecto</string>
+    <string name="donate_dialog_title">☕ Apoyar a MusicWallpaper</string>
+    <string name="donate_dialog_msg">MusicWallpaper es completamente gratuito, de código abierto y sin anuncios. Si te gusta y quieres invitarme a un café para seguir lanzando actualizaciones, ¡cualquier aporte es muy bienvenido!</string>
+    <string name="btn_donate_paypal">💙 Donar vía PayPal</string>
+    <string name="donate_pix_title">Pix (Brasil)</string>
+    <string name="btn_copy_pix">📋 Copiar Clave Pix</string>
+    <string name="toast_pix_copied">¡Clave Pix copiada al portapapeles!</string>
+
+    <string name="faq_q1">1. ¿Cómo mantengo la última portada en la Pantalla de Bloqueo sin dejarla en la Pantalla de Inicio?</string>
+    <string name="faq_a1">Activa \"Mantener la última portada al pausar\" y también \"Mostrar música solo en la Pantalla de Bloqueo\". Luego elige tu foto fija para la Pantalla de Inicio y aplica MusicWallpaper en \"Pantalla de inicio y bloqueo\". Así, la última portada permanecerá solo en la pantalla de bloqueo incluso tras detener la música.</string>
+
+    <string name="faq_q2">2. ¿Por qué no puedo activar \"Usar difusión (Blur) en Inicio\" y \"Mostrar música solo en la Pantalla de Bloqueo\" al mismo tiempo?</string>
+    <string name="faq_a2">Ambas opciones controlan comportamientos distintos para la Pantalla de Inicio mientras suena música:\n• Difusión (Blur) en Inicio: rellena la Pantalla de Inicio con un desenfoque suave del álbum actual y vuelve a su foto de espera al pausar.\n• Solo en Pantalla de Bloqueo: mantiene siempre tu foto fija en Inicio.\nCada opción cuenta con su propio selector de foto independiente.</string>
+
+    <string name="faq_q3">3. Mi dispositivo ya permite aplicar fondos animados solo en la Pantalla de Bloqueo. ¿Necesito activar \"Mostrar música solo en la Pantalla de Bloqueo\"?</string>
+    <string name="faq_a3">No. Esa opción es únicamente para dispositivos o capas que no permiten aplicar fondos animados de forma exclusiva en la pantalla de bloqueo. Si tu teléfono ya lo permite, déjala desactivada.</string>
+
+    <string name="faq_q4">4. Android bloqueó el Acceso a Notificaciones con \"Ajuste restringido\". ¿Cómo lo desbloqueo?</string>
+    <string name="faq_a4">En Android 13+, los APK instalados fuera de Play Store tienen restringido el Acceso a Notificaciones por defecto.\n\nOpción A — Desde el teléfono:\n1. Toca \"Configurar Permiso\" y selecciona MusicWallpaper (pulsa OK en el aviso).\n2. Abre Información de la App, pulsa los 3 puntos (⋮) arriba a la derecha y elige \"Permitir ajustes restringidos\".\n3. Vuelve atrás y activa MusicWallpaper normalmente.\n\nOpción B — Vía ADB (PC o Shizuku/Termux):\nadb shell appops set com.lucasvinicius.musicwallpaper2 ACCESS_RESTRICTED_SETTINGS allow\n\nadb shell cmd notification allow_listener com.lucasvinicius.musicwallpaper2/com.lucasvinicius.musicwallpaper2.MusicNotificationListener</string>
+
+    <string name="faq_q5">5. ¿Cómo evito que YouTube, Reels o navegadores cambien mi fondo de pantalla?</string>
+    <string name="faq_a5">En la Tarjeta 1 (Detección de Música), toca \"Apps Ignoradas\" y marca las aplicaciones de video, redes sociales o navegadores que no quieras que MusicWallpaper detecte.</string>
+
+    <string name="faq_q6">6. ¿Por qué algunas canciones aparecen estáticas o tardan unos segundos en actualizarse con Wi-Fi lento?</string>
+    <string name="faq_a6">No todos los álbumes tienen portada animada oficial en Apple Music. Cuando no existe, la app descarga la portada estática 1000x1000 o usa la de la notificación. En conexiones lentas, puedes cambiar el Modo de Búsqueda a \"Auto\" para usar al instante la portada del reproductor.</string>
+
+    <string name="faq_q7">7. ¿Mantener la portada animada al pausar o usar Difusión en Inicio consume mucha batería?</string>
+    <string name="faq_a7">No. Tanto el reproductor de video (ExoPlayer) como el desenfoque en GPU se pausan automáticamente cuando la pantalla se apaga. En la Pantalla de Inicio con Difusión activa, la transición dura 260ms y el video se detiene enseguida, manteniendo el consumo prácticamente nulo.</string>
+
+    <string name="faq_q8">8. ¿Por qué no aparece \"Colores Dinámicos del Sistema (Material You)\" en mi teléfono?</string>
+    <string name="faq_a8">Esta función está habilitada exclusivamente en dispositivos Google Pixel 7 o superiores, ya que depende del motor nativo Material You de Pixel en la pantalla de bloqueo (con un intervalo de 60 segundos para proteger la CPU).</string>
+</resources>

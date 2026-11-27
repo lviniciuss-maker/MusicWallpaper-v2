@@ -28,8 +28,13 @@
     <string name="search_apps_hint">Pesquisar aplicativo...</string>
     <string name="btn_done">Concluir</string>
 
-    <string name="chk_local_only_title">Usar apenas capa da notificação (Modo Offline)</string>
-    <string name="chk_local_only_desc">Ignora a busca online e usa exclusivamente a arte local enviada pela notificação do seu player de música.</string>
+    <string name="search_mode_title">Modo de Busca de Capas</string>
+    <string name="search_mode_online">Online</string>
+    <string name="search_mode_auto">Auto</string>
+    <string name="search_mode_offline">Offline</string>
+    <string name="search_mode_desc_online">Busca sempre online por capas animadas oficiais (.m3u8) e artes em alta resolução.</string>
+    <string name="search_mode_desc_auto">Modo inteligente: usa o cache normalmente, mas vai direto para a capa da notificação em conexões lentas ou instáveis.</string>
+    <string name="search_mode_desc_offline">100% Offline: ignora buscas online e usa exclusivamente a arte local enviada pela notificação do player.</string>
 
     <string name="chk_wifi_only_title">Capas animadas apenas no Wi-Fi</string>
     <string name="chk_wifi_only_desc">Economiza dados móveis usando capas estáticas no 4G/5G e reproduzindo vídeos .m3u8 somente conectado ao Wi-Fi.</string>
@@ -76,23 +81,37 @@
 
     <string name="card_pos_title">3. Ajustes da Capa e Blur</string>
     <string name="preview_caption">Prévia da Tela de Bloqueio</string>
+    <string name="preview_caption_home">Prévia da Tela Inicial</string>
     <string name="preview_date_sample">Sáb, 21 Nov</string>
-    <string name="pos_label_format">Posição Vertical (do topo): %1$d%%</string>
+    <string name="pos_label_format">Posição Vertical (Tela de Bloqueio): %1$d%%</string>
+    <string name="home_pos_label_format">Posição Vertical (Tela Inicial): %1$d%%</string>
+    <string name="landscape_pos_label_format">Posição Horizontal (Paisagem / Tablet): %1$d%%</string>
     <string name="blur_label_format">Intensidade do Blur: %1$d%%</string>
+    <string name="blur_sat_label_format">Realce de Saturação no Blur: %1$d%%</string>
     <string name="expand_label_format">Expansão da Capa (até 95%% da tela): %1$d%%</string>
     <string name="dim_label_format">Escurecimento da Capa (Dimmer): %1$d%%</string>
     <string name="chk_clock_gradient_title">Sombra superior para o relógio</string>
     <string name="chk_clock_gradient_desc">Aplica um degradê escuro suave no topo da Tela de Bloqueio para melhorar a leitura do relógio em capas claras.</string>
+    <string name="chk_bottom_gradient_title">Sombra inferior sutil (rodapé)</string>
+    <string name="chk_bottom_gradient_desc">Aplica um degradê escuro suave nos 15% inferiores da tela para melhorar o contraste dos atalhos, ícone da digital e texto de carregamento.</string>
     <string name="chk_static_zoom_title">Animação suave em capas estáticas (Zoom)</string>
     <string name="chk_static_zoom_desc">Aplica um efeito lento de aproximação e afastamento quando o álbum não possui capa animada.</string>
     <string name="static_zoom_speed_title">Velocidade da animação de zoom</string>
     <string name="static_zoom_speed_fast">Rápida (8s)</string>
     <string name="static_zoom_speed_medium">Média (12s)</string>
     <string name="static_zoom_speed_slow">Lenta (18s)</string>
+    <string name="static_zoom_intensity_title">Intensidade do zoom</string>
     <string name="btn_reset_pos">Restaurar Ajustes Padrão</string>
 
     <string name="btn_activate_wallpaper">Ativar Papel de Parede</string>
     <string name="toast_error_generic">Não foi possível abrir a tela do sistema</string>
+
+    <string name="btn_export_settings">📤 Exportar (.json)</string>
+    <string name="btn_import_settings">📥 Importar (.json)</string>
+    <string name="toast_export_success">Configurações exportadas com sucesso!</string>
+    <string name="toast_export_error">Não foi possível exportar as configurações.</string>
+    <string name="toast_import_success">Configurações importadas com sucesso!</string>
+    <string name="toast_import_error">Arquivo de configurações inválido ou corrompido.</string>
 
     <string name="crop_dialog_title">Ajustar Papel de Parede</string>
     <string name="crop_dialog_hint">Arraste com 1 dedo para mover • Pinça com 2 dedos para zoom</string>
@@ -136,7 +155,7 @@
     <string name="faq_a5">No Cartão 1 (Detecção de Música), toque em \"Apps Ignorados\" e marque os aplicativos de vídeo, redes sociais ou navegadores que você não deseja monitorar.</string>
 
     <string name="faq_q6">6. Por que algumas músicas ficam estáticas ou demoram alguns segundos no Wi-Fi lento?</string>
-    <string name="faq_a6">Nem todos os álbuns possuem arte animada oficial na Apple Music. Quando não há vídeo, o app baixa a capa estática 1000x1000 ou usa a arte da notificação. Em conexões lentas, a capa anterior continua fluindo na tela enquanto checagens automáticas em 2s e 4s garantem o carregamento.</string>
+    <string name="faq_a6">Nem todos os álbuns possuem arte animada oficial na Apple Music. Quando não há vídeo, o app baixa a capa estática 1000x1000 ou usa a arte da notificação. Em conexões lentas, você pode deixar o Modo de Busca em \"Auto\" para usar imediatamente a capa do player.</string>
 
     <string name="faq_q7">7. Manter a capa animada ao pausar ou usar a Difusão na Tela Inicial gasta muita bateria?</string>
     <string name="faq_a7">Não. O vídeo (ExoPlayer) e o blur na GPU pausam automaticamente quando a tela apaga. Na Tela Inicial com Difusão ativa, a transição dura 260ms e o vídeo pausa logo em seguida, mantendo o consumo praticamente nulo.</string>

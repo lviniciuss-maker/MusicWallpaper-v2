@@ -19,10 +19,15 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.LinearGradient
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
@@ -60,6 +65,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
@@ -118,9 +124,11 @@ class MainActivity : AppCompatActivity() {
 
     private var statusText: TextView? = null
     private var previewImageView: ImageView? = null
+    private var lockscreenPreviewView: LockscreenPreviewView? = null
 
     private var pauseDelayContainer: LinearLayout? = null
     private var staticZoomSpeedContainer: LinearLayout? = null
+    private var homePosSliderContainer: LinearLayout? = null
 
     private var homePhotoContainer: LinearLayout? = null
     private var homeStatusText: TextView? = null
@@ -133,6 +141,8 @@ class MainActivity : AppCompatActivity() {
     private val pickLockscreenImageRequest = 1001
     private val pickHomeImageRequest = 1002
     private val pickHomeBlurImageRequest = 1003
+    private val exportSettingsRequest = 1004
+    private val importSettingsRequest = 1005
     private val requestPostNotificationsCode = 2001
 
     private val githubOwner = "lviniciuss-maker"
@@ -146,6 +156,7 @@ class MainActivity : AppCompatActivity() {
             if (intent?.action == "com.lucasvinicius.musicwallpaper2.ACTION_DEBUG_METADATA_UPDATED") {
                 updateDiagnosticUI()
                 updateCacheSizeUI()
+                loadLatestCachedCoverForPreview()
             }
         }
     }
@@ -253,17 +264,38 @@ class MainActivity : AppCompatActivity() {
         insetsController.isAppearanceLightNavigationBars = !isDark
 
         var currentOffsetPercent = prefs.getInt("top_offset_percent", 20).coerceIn(0, 60)
+        var currentHomeOffsetPercent = if (prefs.contains("home_top_offset_percent")) {
+            prefs.getInt("home_top_offset_percent", currentOffsetPercent).coerceIn(0, 60)
+        } else {
+            currentOffsetPercent
+        }
+        var isPreviewingHomePos = false
+        var currentLandscapeHorizontalPercent = prefs.getInt("landscape_horizontal_percent", 50).coerceIn(0, 100)
         var currentBlurPercent = prefs.getInt("blur_strength_percent", 100).coerceIn(60, 100)
+        var currentBlurSatBoostPercent = prefs.getInt("blur_saturation_boost_percent", 0).coerceIn(0, 60)
         var currentExpansionPercent = prefs.getInt("cover_expansion_percent", 0).coerceIn(0, 100)
         var currentDimPercent = prefs.getInt("cover_dim_percent", 0).coerceIn(0, 40)
         var currentClockGradient = prefs.getBoolean("clock_top_gradient", false)
+        var currentBottomGradient = prefs.getBoolean("bottom_footer_gradient", false)
         val savedStaticZoomEnabled = prefs.getBoolean("static_cover_zoom_enabled", false)
         var currentStaticZoomCycleSec = prefs.getInt("static_cover_zoom_cycle_sec", 12).let {
             if (it in listOf(8, 12, 18)) it else 12
         }
+        var currentStaticZoomIntensityPercent = prefs.getInt("static_cover_zoom_intensity_percent", 6).let {
+            if (it in listOf(6, 8, 10)) it else 6
+        }
         val savedHomeBlurBrightness = prefs.getInt("home_blur_brightness_percent", 82).coerceIn(40, 100)
         val savedUpdateNotif = prefs.getBoolean("update_notifications_enabled", false) && hasPostNotificationsPermission()
-        val savedOfflineOnly = prefs.getBoolean("offline_only_mode", false)
+
+        // 0 = Online | 1 = Auto (Rede Lenta) | 2 = Offline (100%)
+        var currentSearchMode = if (prefs.contains("search_mode")) {
+            prefs.getInt("search_mode", 0).coerceIn(0, 2)
+        } else if (prefs.getBoolean("offline_only_mode", false)) {
+            2
+        } else {
+            0
+        }
+
         val savedWifiOnlyAnimated = prefs.getBoolean("wifi_only_animated", false)
         val savedPauseOnBatterySaver = prefs.getBoolean("pause_on_battery_saver", true)
         val savedKeepLastCover = prefs.getBoolean("keep_last_cover_on_pause", false)
@@ -278,6 +310,37 @@ class MainActivity : AppCompatActivity() {
         }
         val savedPixelColors = prefs.getBoolean("pixel_dynamic_colors", false)
         val currentAppVersion = getInstalledVersionName()
+
+        var previewCaptionRef: TextView? = null
+        fun refreshLockscreenPreview() {
+            val activeOffset = if (isPreviewingHomePos) currentHomeOffsetPercent else currentOffsetPercent
+            previewCaptionRef?.text = if (isPreviewingHomePos) {
+                getString(R.string.preview_caption_home)
+            } else {
+                getString(R.string.preview_caption)
+            }
+            lockscreenPreviewView?.updateParams(
+                topOffsetPercent = activeOffset,
+                blurPercent = currentBlurPercent,
+                blurSatBoostPercent = currentBlurSatBoostPercent,
+                expansionPercent = currentExpansionPercent,
+                dimPercent = currentDimPercent,
+                clockGradient = currentClockGradient,
+                bottomGradient = currentBottomGradient,
+                showClock = !isPreviewingHomePos
+            )
+        }
+
+        fun updateHomePosSliderVisibility() {
+            val homeBlurOn = prefs.getBoolean("home_use_album_blur", false)
+            val lockOnlyOn = prefs.getBoolean("lockscreen_only_mode", false)
+            val showHomePos = !homeBlurOn && !lockOnlyOn
+            homePosSliderContainer?.visibility = if (showHomePos) View.VISIBLE else View.GONE
+            if (!showHomePos && isPreviewingHomePos) {
+                isPreviewingHomePos = false
+                refreshLockscreenPreview()
+            }
+        }
 
         val scrollView = ScrollView(this).apply {
             setBackgroundColor(palette.bg)
@@ -355,7 +418,7 @@ class MainActivity : AppCompatActivity() {
         rootLayout.addView(createSpacer(18))
 
         // =========================================================================
-        // CARTÃO 1: PERMISSÃO + AVISO DE ATUALIZAÇÃO + EXCEÇÕES + OFFLINE + WI-FI + BATERIA + CACHE + DIAGNÓSTICO
+        // CARTÃO 1: PERMISSÃO + AVISO DE ATUALIZAÇÃO + EXCEÇÕES + MODO DE BUSCA + WI-FI + BATERIA + CACHE + DIAGNÓSTICO
         // =========================================================================
         val cardPerm = createCardLayout()
 
@@ -425,15 +488,7 @@ class MainActivity : AppCompatActivity() {
         }
         updateExcludedButtonCount()
 
-        val localOnlyRow = createToggleRow(
-            title = getString(R.string.chk_local_only_title),
-            desc = getString(R.string.chk_local_only_desc),
-            initialChecked = savedOfflineOnly
-        ) { newState ->
-            prefs.edit().putBoolean("offline_only_mode", newState).apply()
-            notifySettingsChanged()
-        }
-
+        val wifiOnlySpacer = createSpacer(10)
         val wifiOnlyRow = createToggleRow(
             title = getString(R.string.chk_wifi_only_title),
             desc = getString(R.string.chk_wifi_only_desc),
@@ -442,6 +497,94 @@ class MainActivity : AppCompatActivity() {
             prefs.edit().putBoolean("wifi_only_animated", newState).apply()
             notifySettingsChanged()
         }
+
+        val searchModeContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            background = GradientDrawable().apply {
+                setColor(palette.toggleRowBg)
+                cornerRadius = dp(12).toFloat()
+            }
+        }
+
+        val searchModeTitleTv = TextView(this).apply {
+            text = getString(R.string.search_mode_title)
+            setTextColor(palette.primaryText)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setPadding(0, 0, 0, dp(10))
+        }
+
+        val searchModePillsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val searchModeDescTv = TextView(this).apply {
+            setTextColor(palette.secondaryText)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setPadding(0, dp(10), 0, 0)
+        }
+
+        val searchModeOptions = listOf(
+            Pair(0, getString(R.string.search_mode_online)),
+            Pair(1, getString(R.string.search_mode_auto)),
+            Pair(2, getString(R.string.search_mode_offline))
+        )
+        val searchModeButtons = mutableListOf<Pair<Int, TextView>>()
+
+        fun applySearchModeUI(selectedMode: Int) {
+            for ((mode, tv) in searchModeButtons) {
+                val isSelected = (mode == selectedMode)
+                tv.setTextColor(if (isSelected) palette.accentOnPrimary else palette.bodyText)
+                tv.typeface = if (isSelected) Typeface.create("sans-serif-medium", Typeface.BOLD) else Typeface.DEFAULT
+                tv.background = GradientDrawable().apply {
+                    setColor(if (isSelected) palette.accent else palette.pillUnselectedBg)
+                    cornerRadius = dp(10).toFloat()
+                    if (!isSelected) {
+                        setStroke(dp(1), palette.pillUnselectedStroke)
+                    }
+                }
+            }
+            searchModeDescTv.text = when (selectedMode) {
+                1 -> getString(R.string.search_mode_desc_auto)
+                2 -> getString(R.string.search_mode_desc_offline)
+                else -> getString(R.string.search_mode_desc_online)
+            }
+            val wifiVis = if (selectedMode == 2) View.GONE else View.VISIBLE
+            wifiOnlySpacer.visibility = wifiVis
+            wifiOnlyRow.visibility = wifiVis
+        }
+
+        searchModeOptions.forEachIndexed { idx, (mode, label) ->
+            val pill = TextView(this).apply {
+                text = label
+                gravity = Gravity.CENTER
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                setPadding(dp(8), dp(9), dp(8), dp(9))
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    if (idx < searchModeOptions.lastIndex) marginEnd = dp(8)
+                }
+                setOnClickListener {
+                    if (currentSearchMode != mode) {
+                        currentSearchMode = mode
+                        prefs.edit()
+                            .putInt("search_mode", mode)
+                            .putBoolean("offline_only_mode", mode == 2)
+                            .apply()
+                        applySearchModeUI(mode)
+                        notifySettingsChanged()
+                    }
+                }
+            }
+            searchModeButtons.add(Pair(mode, pill))
+            searchModePillsRow.addView(pill)
+        }
+        applySearchModeUI(currentSearchMode)
+
+        searchModeContainer.addView(searchModeTitleTv)
+        searchModeContainer.addView(searchModePillsRow)
+        searchModeContainer.addView(searchModeDescTv)
 
         val batterySaverRow = createToggleRow(
             title = getString(R.string.chk_battery_saver_title),
@@ -463,6 +606,7 @@ class MainActivity : AppCompatActivity() {
                             setPackage(packageName)
                         })
                         updateCacheSizeUI()
+                        loadLatestCachedCoverForPreview()
                         Toast.makeText(this@MainActivity, getString(R.string.toast_cache_cleared), Toast.LENGTH_SHORT).show()
                     }
                 }
@@ -541,8 +685,8 @@ class MainActivity : AppCompatActivity() {
         cardPerm.addView(createSpacer(10))
         cardPerm.addView(btnExcludedApps)
         cardPerm.addView(createSpacer(12))
-        cardPerm.addView(localOnlyRow)
-        cardPerm.addView(createSpacer(10))
+        cardPerm.addView(searchModeContainer)
+        cardPerm.addView(wifiOnlySpacer)
         cardPerm.addView(wifiOnlyRow)
         cardPerm.addView(createSpacer(10))
         cardPerm.addView(batterySaverRow)
@@ -712,6 +856,7 @@ class MainActivity : AppCompatActivity() {
             }
             editor.apply()
             homePhotoContainer?.visibility = if (newState) View.VISIBLE else View.GONE
+            updateHomePosSliderVisibility()
             notifySettingsChanged()
         }
         lockscreenOnlyRowRef = lockscreenOnlyRow
@@ -729,6 +874,7 @@ class MainActivity : AppCompatActivity() {
             }
             editor.apply()
             homeBlurPhotoContainer?.visibility = if (newState) View.VISIBLE else View.GONE
+            updateHomePosSliderVisibility()
             notifySettingsChanged()
         }
         homeUseBlurRowRef = homeUseBlurRow
@@ -909,7 +1055,7 @@ class MainActivity : AppCompatActivity() {
         rootLayout.addView(createSpacer(16))
 
         // =========================================================================
-        // CARTÃO 3: PREVIEW + POSIÇÃO (60%) + BLUR + EXPANSÃO + DIMMER + RELÓGIO + ZOOM
+        // CARTÃO 3: PREVIEW (CAPA REAL) + POSIÇÕES + BLUR + SATURAÇÃO + EXPANSÃO + DIMMER + SOMBRAS + ZOOM
         // =========================================================================
         val cardPos = createCardLayout()
 
@@ -927,14 +1073,8 @@ class MainActivity : AppCompatActivity() {
             palette.previewFrameBorder
         ).apply {
             layoutParams = LinearLayout.LayoutParams(dp(128), dp(276))
-            updateParams(
-                topOffsetPercent = currentOffsetPercent,
-                blurPercent = currentBlurPercent,
-                expansionPercent = currentExpansionPercent,
-                dimPercent = currentDimPercent,
-                clockGradient = currentClockGradient
-            )
         }
+        lockscreenPreviewView = lockscreenPreview
 
         val previewCaptionTv = TextView(this).apply {
             text = getString(R.string.preview_caption)
@@ -942,6 +1082,8 @@ class MainActivity : AppCompatActivity() {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f)
             setPadding(0, dp(8), 0, 0)
         }
+        previewCaptionRef = previewCaptionTv
+        refreshLockscreenPreview()
 
         previewWrapper.addView(lockscreenPreview)
         previewWrapper.addView(previewCaptionTv)
@@ -964,11 +1106,82 @@ class MainActivity : AppCompatActivity() {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                     currentOffsetPercent = progress
                     sliderLabel.text = getString(R.string.pos_label_format, progress)
-                    lockscreenPreview.updateParams(
-                        currentOffsetPercent, currentBlurPercent, currentExpansionPercent, currentDimPercent, currentClockGradient
-                    )
                     if (fromUser) {
+                        isPreviewingHomePos = false
                         prefs.edit().putInt("top_offset_percent", progress).apply()
+                        notifySettingsChanged()
+                    }
+                    refreshLockscreenPreview()
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {
+                    isPreviewingHomePos = false
+                    refreshLockscreenPreview()
+                }
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+        }
+
+        homePosSliderContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = if (!savedHomeUseAlbumBlur && !savedLockscreenOnly) View.VISIBLE else View.GONE
+        }
+
+        val homeSliderLabel = TextView(this).apply {
+            setTextColor(palette.accent)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, dp(6), 0, dp(8))
+            text = getString(R.string.home_pos_label_format, currentHomeOffsetPercent)
+        }
+
+        val seekBarHomePos = SeekBar(this).apply {
+            max = 60
+            progress = currentHomeOffsetPercent
+            progressTintList = ColorStateList.valueOf(palette.accent)
+            thumbTintList = ColorStateList.valueOf(palette.accent)
+            setPadding(dp(14), dp(6), dp(14), dp(14))
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    currentHomeOffsetPercent = progress
+                    homeSliderLabel.text = getString(R.string.home_pos_label_format, progress)
+                    if (fromUser) {
+                        isPreviewingHomePos = true
+                        prefs.edit().putInt("home_top_offset_percent", progress).apply()
+                        notifySettingsChanged()
+                    }
+                    refreshLockscreenPreview()
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {
+                    isPreviewingHomePos = true
+                    refreshLockscreenPreview()
+                }
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+        }
+
+        homePosSliderContainer?.addView(homeSliderLabel)
+        homePosSliderContainer?.addView(seekBarHomePos)
+
+        val landscapePosLabel = TextView(this).apply {
+            setTextColor(palette.accent)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, dp(6), 0, dp(8))
+            text = getString(R.string.landscape_pos_label_format, currentLandscapeHorizontalPercent)
+        }
+
+        val seekBarLandscapePos = SeekBar(this).apply {
+            max = 100
+            progress = currentLandscapeHorizontalPercent
+            progressTintList = ColorStateList.valueOf(palette.accent)
+            thumbTintList = ColorStateList.valueOf(palette.accent)
+            setPadding(dp(14), dp(6), dp(14), dp(14))
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    currentLandscapeHorizontalPercent = progress
+                    landscapePosLabel.text = getString(R.string.landscape_pos_label_format, progress)
+                    if (fromUser) {
+                        prefs.edit().putInt("landscape_horizontal_percent", progress).apply()
                         notifySettingsChanged()
                     }
                 }
@@ -995,11 +1208,38 @@ class MainActivity : AppCompatActivity() {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                     currentBlurPercent = 60 + progress
                     blurLabel.text = getString(R.string.blur_label_format, currentBlurPercent)
-                    lockscreenPreview.updateParams(
-                        currentOffsetPercent, currentBlurPercent, currentExpansionPercent, currentDimPercent, currentClockGradient
-                    )
+                    refreshLockscreenPreview()
                     if (fromUser) {
                         prefs.edit().putInt("blur_strength_percent", currentBlurPercent).apply()
+                        notifySettingsChanged()
+                    }
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+        }
+
+        val blurSatLabel = TextView(this).apply {
+            setTextColor(palette.accent)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            typeface = Typeface.DEFAULT_BOLD
+            setPadding(0, dp(6), 0, dp(8))
+            text = getString(R.string.blur_sat_label_format, currentBlurSatBoostPercent)
+        }
+
+        val seekBarBlurSat = SeekBar(this).apply {
+            max = 60
+            progress = currentBlurSatBoostPercent
+            progressTintList = ColorStateList.valueOf(palette.accent)
+            thumbTintList = ColorStateList.valueOf(palette.accent)
+            setPadding(dp(14), dp(6), dp(14), dp(14))
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    currentBlurSatBoostPercent = progress
+                    blurSatLabel.text = getString(R.string.blur_sat_label_format, progress)
+                    refreshLockscreenPreview()
+                    if (fromUser) {
+                        prefs.edit().putInt("blur_saturation_boost_percent", progress).apply()
                         notifySettingsChanged()
                     }
                 }
@@ -1026,9 +1266,7 @@ class MainActivity : AppCompatActivity() {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                     currentExpansionPercent = progress
                     expandLabel.text = getString(R.string.expand_label_format, progress)
-                    lockscreenPreview.updateParams(
-                        currentOffsetPercent, currentBlurPercent, currentExpansionPercent, currentDimPercent, currentClockGradient
-                    )
+                    refreshLockscreenPreview()
                     if (fromUser) {
                         prefs.edit().putInt("cover_expansion_percent", progress).apply()
                         notifySettingsChanged()
@@ -1057,9 +1295,7 @@ class MainActivity : AppCompatActivity() {
                 override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                     currentDimPercent = progress
                     dimLabel.text = getString(R.string.dim_label_format, progress)
-                    lockscreenPreview.updateParams(
-                        currentOffsetPercent, currentBlurPercent, currentExpansionPercent, currentDimPercent, currentClockGradient
-                    )
+                    refreshLockscreenPreview()
                     if (fromUser) {
                         prefs.edit().putInt("cover_dim_percent", progress).apply()
                         notifySettingsChanged()
@@ -1076,10 +1312,19 @@ class MainActivity : AppCompatActivity() {
             initialChecked = currentClockGradient
         ) { newState ->
             currentClockGradient = newState
-            lockscreenPreview.updateParams(
-                currentOffsetPercent, currentBlurPercent, currentExpansionPercent, currentDimPercent, currentClockGradient
-            )
+            refreshLockscreenPreview()
             prefs.edit().putBoolean("clock_top_gradient", newState).apply()
+            notifySettingsChanged()
+        }
+
+        val bottomGradientRow = createToggleRow(
+            title = getString(R.string.chk_bottom_gradient_title),
+            desc = getString(R.string.chk_bottom_gradient_desc),
+            initialChecked = currentBottomGradient
+        ) { newState ->
+            currentBottomGradient = newState
+            refreshLockscreenPreview()
+            prefs.edit().putBoolean("bottom_footer_gradient", newState).apply()
             notifySettingsChanged()
         }
 
@@ -1150,8 +1395,66 @@ class MainActivity : AppCompatActivity() {
         }
         styleZoomSpeedButtons(currentStaticZoomCycleSec)
 
+        val staticZoomIntensityTitleTv = TextView(this).apply {
+            text = getString(R.string.static_zoom_intensity_title)
+            setTextColor(palette.accent)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setPadding(0, dp(12), 0, dp(10))
+        }
+
+        val staticZoomIntensityRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val zoomIntensityOptions = listOf(
+            Pair(6, "6%"),
+            Pair(8, "8%"),
+            Pair(10, "10%")
+        )
+        val zoomIntensityButtons = mutableListOf<Pair<Int, TextView>>()
+
+        fun styleZoomIntensityButtons(selectedPct: Int) {
+            for ((pct, tv) in zoomIntensityButtons) {
+                val isSelected = (pct == selectedPct)
+                tv.setTextColor(if (isSelected) palette.accentOnPrimary else palette.bodyText)
+                tv.typeface = if (isSelected) Typeface.create("sans-serif-medium", Typeface.BOLD) else Typeface.DEFAULT
+                tv.background = GradientDrawable().apply {
+                    setColor(if (isSelected) palette.accent else palette.pillUnselectedBg)
+                    cornerRadius = dp(10).toFloat()
+                    if (!isSelected) {
+                        setStroke(dp(1), palette.pillUnselectedStroke)
+                    }
+                }
+            }
+        }
+
+        zoomIntensityOptions.forEachIndexed { idx, (pct, label) ->
+            val pill = TextView(this).apply {
+                text = label
+                gravity = Gravity.CENTER
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f)
+                setPadding(dp(6), dp(9), dp(6), dp(9))
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    if (idx < zoomIntensityOptions.lastIndex) marginEnd = dp(8)
+                }
+                setOnClickListener {
+                    currentStaticZoomIntensityPercent = pct
+                    prefs.edit().putInt("static_cover_zoom_intensity_percent", pct).apply()
+                    styleZoomIntensityButtons(pct)
+                    notifySettingsChanged()
+                }
+            }
+            zoomIntensityButtons.add(Pair(pct, pill))
+            staticZoomIntensityRow.addView(pill)
+        }
+        styleZoomIntensityButtons(currentStaticZoomIntensityPercent)
+
         staticZoomSpeedContainer?.addView(staticZoomSpeedTitleTv)
         staticZoomSpeedContainer?.addView(staticZoomSpeedRow)
+        staticZoomSpeedContainer?.addView(staticZoomIntensityTitleTv)
+        staticZoomSpeedContainer?.addView(staticZoomIntensityRow)
 
         val staticZoomRow = createToggleRow(
             title = getString(R.string.chk_static_zoom_title),
@@ -1165,31 +1468,47 @@ class MainActivity : AppCompatActivity() {
 
         val btnResetOffset = createSecondaryButton(getString(R.string.btn_reset_pos)).apply {
             setOnClickListener {
+                isPreviewingHomePos = false
                 currentOffsetPercent = 20
+                currentHomeOffsetPercent = 20
+                currentLandscapeHorizontalPercent = 50
                 currentBlurPercent = 100
+                currentBlurSatBoostPercent = 0
                 currentExpansionPercent = 0
                 currentDimPercent = 0
                 currentClockGradient = false
+                currentBottomGradient = false
                 currentStaticZoomCycleSec = 12
+                currentStaticZoomIntensityPercent = 6
                 seekBarPos.progress = 20
+                seekBarHomePos.progress = 20
+                seekBarLandscapePos.progress = 50
                 seekBarBlur.progress = 40
+                seekBarBlurSat.progress = 0
                 seekBarExpand.progress = 0
                 seekBarDim.progress = 0
                 seekBarHomeBlurBrightness.progress = 42
                 (clockGradientRow.getChildAt(1) as? CheckBox)?.isChecked = false
+                (bottomGradientRow.getChildAt(1) as? CheckBox)?.isChecked = false
                 (staticZoomRow.getChildAt(1) as? CheckBox)?.isChecked = false
                 staticZoomSpeedContainer?.visibility = View.GONE
                 styleZoomSpeedButtons(12)
-                lockscreenPreview.updateParams(20, 100, 0, 0, false)
+                styleZoomIntensityButtons(6)
+                refreshLockscreenPreview()
                 prefs.edit()
                     .putInt("top_offset_percent", 20)
+                    .putInt("home_top_offset_percent", 20)
+                    .putInt("landscape_horizontal_percent", 50)
                     .putInt("blur_strength_percent", 100)
+                    .putInt("blur_saturation_boost_percent", 0)
                     .putInt("cover_expansion_percent", 0)
                     .putInt("cover_dim_percent", 0)
                     .putInt("home_blur_brightness_percent", 82)
                     .putBoolean("clock_top_gradient", false)
+                    .putBoolean("bottom_footer_gradient", false)
                     .putBoolean("static_cover_zoom_enabled", false)
                     .putInt("static_cover_zoom_cycle_sec", 12)
+                    .putInt("static_cover_zoom_intensity_percent", 6)
                     .apply()
                 notifySettingsChanged()
             }
@@ -1199,13 +1518,20 @@ class MainActivity : AppCompatActivity() {
         cardPos.addView(previewWrapper)
         cardPos.addView(sliderLabel)
         cardPos.addView(seekBarPos)
+        cardPos.addView(homePosSliderContainer)
+        cardPos.addView(landscapePosLabel)
+        cardPos.addView(seekBarLandscapePos)
         cardPos.addView(blurLabel)
         cardPos.addView(seekBarBlur)
+        cardPos.addView(blurSatLabel)
+        cardPos.addView(seekBarBlurSat)
         cardPos.addView(expandLabel)
         cardPos.addView(seekBarExpand)
         cardPos.addView(dimLabel)
         cardPos.addView(seekBarDim)
         cardPos.addView(clockGradientRow)
+        cardPos.addView(createSpacer(10))
+        cardPos.addView(bottomGradientRow)
         cardPos.addView(createSpacer(10))
         cardPos.addView(staticZoomRow)
         cardPos.addView(createSpacer(8))
@@ -1248,6 +1574,57 @@ class MainActivity : AppCompatActivity() {
         rootLayout.addView(createSpacer(12))
 
         // =========================================================================
+        // BACKUP DE CONFIGURAÇÕES: EXPORTAR | IMPORTAR (.JSON)
+        // =========================================================================
+        val backupRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val btnExport = createSecondaryButton(getString(R.string.btn_export_settings)).apply {
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginEnd = dp(6)
+            }
+            setOnClickListener {
+                try {
+                    val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "application/json"
+                        putExtra(Intent.EXTRA_TITLE, "MusicWallpaper_Backup.json")
+                    }
+                    @Suppress("DEPRECATION")
+                    startActivityForResult(intent, exportSettingsRequest)
+                } catch (_: Exception) {
+                    Toast.makeText(this@MainActivity, getString(R.string.toast_export_error), Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        val btnImport = createSecondaryButton(getString(R.string.btn_import_settings)).apply {
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = dp(6)
+            }
+            setOnClickListener {
+                try {
+                    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "*/*"
+                        putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/json", "text/plain"))
+                    }
+                    @Suppress("DEPRECATION")
+                    startActivityForResult(intent, importSettingsRequest)
+                } catch (_: Exception) {
+                    Toast.makeText(this@MainActivity, getString(R.string.toast_import_error), Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        backupRow.addView(btnExport)
+        backupRow.addView(btnImport)
+        rootLayout.addView(backupRow)
+        rootLayout.addView(createSpacer(10))
+
+        // =========================================================================
         // RODAPÉ: ATUALIZAÇÕES NO GITHUB + FAQ + APOIAR O PROJETO
         // =========================================================================
         val btnCheckUpdate = createSecondaryButton(getString(R.string.btn_check_updates, currentAppVersion)).apply {
@@ -1281,8 +1658,292 @@ class MainActivity : AppCompatActivity() {
         syncUpdateNotificationToggle()
         updateDiagnosticUI()
         updateCacheSizeUI()
+        loadLatestCachedCoverForPreview()
 
         checkForGitHubUpdates(isManualCheck = false)
+    }
+
+    private fun loadLatestCachedCoverForPreview() {
+        thread {
+            var sharpBmp: Bitmap? = null
+            var blurBmp: Bitmap? = null
+            try {
+                val coversDir = File(cacheDir, "artwork_cache/covers")
+                val latestFile = coversDir.listFiles()
+                    ?.filter { it.isFile && (it.name.endsWith(".jpg", true) || it.name.endsWith(".png", true)) }
+                    ?.maxByOrNull { it.lastModified() }
+
+                if (latestFile != null) {
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(latestFile.absolutePath, bounds)
+                    var sample = 1
+                    val maxDim = max(bounds.outWidth, bounds.outHeight)
+                    while (maxDim / sample > 480) {
+                        sample *= 2
+                    }
+                    val opts = BitmapFactory.Options().apply {
+                        inSampleSize = sample
+                        inPreferredConfig = Bitmap.Config.ARGB_8888
+                    }
+                    sharpBmp = BitmapFactory.decodeFile(latestFile.absolutePath, opts)
+                    if (sharpBmp != null) {
+                        blurBmp = createFastPreviewBlur(sharpBmp)
+                    }
+                }
+            } catch (_: Throwable) {}
+
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed) {
+                    lockscreenPreviewView?.setCoverArtwork(sharpBmp, blurBmp)
+                }
+            }
+        }
+    }
+
+    private fun createFastPreviewBlur(src: Bitmap): Bitmap {
+        val tinyW = 18
+        val tinyH = 18
+        val tiny = Bitmap.createScaledBitmap(src, tinyW, tinyH, true)
+        val pixels = IntArray(tinyW * tinyH)
+        tiny.getPixels(pixels, 0, tinyW, 0, 0, tinyW, tinyH)
+        val out = IntArray(tinyW * tinyH)
+
+        var cur = pixels
+        var dst = out
+        repeat(2) {
+            for (y in 0 until tinyH) {
+                for (x in 0 until tinyW) {
+                    var r = 0
+                    var g = 0
+                    var b = 0
+                    var count = 0
+                    for (dy in -1..1) {
+                        val ny = (y + dy).coerceIn(0, tinyH - 1)
+                        for (dx in -1..1) {
+                            val nx = (x + dx).coerceIn(0, tinyW - 1)
+                            val c = cur[ny * tinyW + nx]
+                            r += Color.red(c)
+                            g += Color.green(c)
+                            b += Color.blue(c)
+                            count++
+                        }
+                    }
+                    dst[y * tinyW + x] = Color.rgb(r / count, g / count, b / count)
+                }
+            }
+            val tmp = cur
+            cur = dst
+            dst = tmp
+        }
+
+        val blurredTiny = Bitmap.createBitmap(tinyW, tinyH, Bitmap.Config.ARGB_8888)
+        blurredTiny.setPixels(cur, 0, tinyW, 0, 0, tinyW, tinyH)
+        return Bitmap.createScaledBitmap(blurredTiny, 128, 256, true)
+    }
+
+    private fun exportSettingsToUri(uri: Uri) {
+        thread {
+            try {
+                val prefs = getSharedPreferences("wallpaper_prefs", MODE_PRIVATE)
+                val excluded = prefs.getStringSet("excluded_packages", emptySet()) ?: emptySet()
+                val excludedArray = JSONArray().apply {
+                    excluded.sorted().forEach { put(it) }
+                }
+
+                val savedMode = if (prefs.contains("search_mode")) {
+                    prefs.getInt("search_mode", 0).coerceIn(0, 2)
+                } else if (prefs.getBoolean("offline_only_mode", false)) {
+                    2
+                } else {
+                    0
+                }
+
+                val savedTopOffset = prefs.getInt("top_offset_percent", 20)
+                val savedHomeTopOffset = if (prefs.contains("home_top_offset_percent")) {
+                    prefs.getInt("home_top_offset_percent", savedTopOffset)
+                } else {
+                    savedTopOffset
+                }
+
+                val root = JSONObject().apply {
+                    put("app", "MusicWallpaper")
+                    put("schema_version", 3)
+                    put("app_theme_mode", prefs.getInt("app_theme_mode", 0))
+                    put("top_offset_percent", savedTopOffset)
+                    put("home_top_offset_percent", savedHomeTopOffset)
+                    put("landscape_horizontal_percent", prefs.getInt("landscape_horizontal_percent", 50))
+                    put("blur_strength_percent", prefs.getInt("blur_strength_percent", 100))
+                    put("blur_saturation_boost_percent", prefs.getInt("blur_saturation_boost_percent", 0))
+                    put("cover_expansion_percent", prefs.getInt("cover_expansion_percent", 0))
+                    put("cover_dim_percent", prefs.getInt("cover_dim_percent", 0))
+                    put("clock_top_gradient", prefs.getBoolean("clock_top_gradient", false))
+                    put("bottom_footer_gradient", prefs.getBoolean("bottom_footer_gradient", false))
+                    put("static_cover_zoom_enabled", prefs.getBoolean("static_cover_zoom_enabled", false))
+                    put("static_cover_zoom_cycle_sec", prefs.getInt("static_cover_zoom_cycle_sec", 12))
+                    put("static_cover_zoom_intensity_percent", prefs.getInt("static_cover_zoom_intensity_percent", 6))
+                    put("home_blur_brightness_percent", prefs.getInt("home_blur_brightness_percent", 82))
+                    put("pause_delay_seconds", prefs.getInt("pause_delay_seconds", 5))
+                    put("keep_last_cover_on_pause", prefs.getBoolean("keep_last_cover_on_pause", false))
+                    put("lockscreen_only_mode", prefs.getBoolean("lockscreen_only_mode", false))
+                    put("home_use_album_blur", prefs.getBoolean("home_use_album_blur", false))
+                    put("search_mode", savedMode)
+                    put("offline_only_mode", savedMode == 2)
+                    put("wifi_only_animated", prefs.getBoolean("wifi_only_animated", false))
+                    put("pause_on_battery_saver", prefs.getBoolean("pause_on_battery_saver", true))
+                    put("pixel_dynamic_colors", prefs.getBoolean("pixel_dynamic_colors", false))
+                    put("update_notifications_enabled", prefs.getBoolean("update_notifications_enabled", false))
+                    put("excluded_packages", excludedArray)
+                }
+
+                contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(root.toString(2).toByteArray(Charsets.UTF_8))
+                } ?: throw IllegalStateException("OutputStream null")
+
+                runOnUiThread {
+                    Toast.makeText(this, getString(R.string.toast_export_success), Toast.LENGTH_SHORT).show()
+                }
+            } catch (_: Throwable) {
+                runOnUiThread {
+                    Toast.makeText(this, getString(R.string.toast_export_error), Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun importSettingsFromUri(uri: Uri) {
+        thread {
+            try {
+                val rawText = contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                    ?: throw IllegalStateException("InputStream null")
+
+                val json = JSONObject(rawText)
+                val looksValid = json.optString("app", "") == "MusicWallpaper" ||
+                        json.has("top_offset_percent") ||
+                        json.has("blur_strength_percent")
+                if (!looksValid) {
+                    throw IllegalArgumentException("Unrecognized JSON")
+                }
+
+                val prefs = getSharedPreferences("wallpaper_prefs", MODE_PRIVATE)
+                val editor = prefs.edit()
+
+                if (json.has("app_theme_mode")) {
+                    editor.putInt("app_theme_mode", json.optInt("app_theme_mode", 0).coerceIn(0, 2))
+                }
+                if (json.has("top_offset_percent")) {
+                    editor.putInt("top_offset_percent", json.optInt("top_offset_percent", 20).coerceIn(0, 60))
+                }
+                if (json.has("home_top_offset_percent")) {
+                    editor.putInt("home_top_offset_percent", json.optInt("home_top_offset_percent", 20).coerceIn(0, 60))
+                } else if (json.has("top_offset_percent")) {
+                    editor.putInt("home_top_offset_percent", json.optInt("top_offset_percent", 20).coerceIn(0, 60))
+                }
+                if (json.has("landscape_horizontal_percent")) {
+                    editor.putInt("landscape_horizontal_percent", json.optInt("landscape_horizontal_percent", 50).coerceIn(0, 100))
+                }
+                if (json.has("blur_strength_percent")) {
+                    editor.putInt("blur_strength_percent", json.optInt("blur_strength_percent", 100).coerceIn(60, 100))
+                }
+                if (json.has("blur_saturation_boost_percent")) {
+                    editor.putInt("blur_saturation_boost_percent", json.optInt("blur_saturation_boost_percent", 0).coerceIn(0, 60))
+                }
+                if (json.has("cover_expansion_percent")) {
+                    editor.putInt("cover_expansion_percent", json.optInt("cover_expansion_percent", 0).coerceIn(0, 100))
+                }
+                if (json.has("cover_dim_percent")) {
+                    editor.putInt("cover_dim_percent", json.optInt("cover_dim_percent", 0).coerceIn(0, 40))
+                }
+                if (json.has("clock_top_gradient")) {
+                    editor.putBoolean("clock_top_gradient", json.optBoolean("clock_top_gradient", false))
+                }
+                if (json.has("bottom_footer_gradient")) {
+                    editor.putBoolean("bottom_footer_gradient", json.optBoolean("bottom_footer_gradient", false))
+                }
+                if (json.has("static_cover_zoom_enabled")) {
+                    editor.putBoolean("static_cover_zoom_enabled", json.optBoolean("static_cover_zoom_enabled", false))
+                }
+                if (json.has("static_cover_zoom_cycle_sec")) {
+                    val cycle = json.optInt("static_cover_zoom_cycle_sec", 12).let { if (it in listOf(8, 12, 18)) it else 12 }
+                    editor.putInt("static_cover_zoom_cycle_sec", cycle)
+                }
+                if (json.has("static_cover_zoom_intensity_percent")) {
+                    val intensity = json.optInt("static_cover_zoom_intensity_percent", 6).let { if (it in listOf(6, 8, 10)) it else 6 }
+                    editor.putInt("static_cover_zoom_intensity_percent", intensity)
+                }
+                if (json.has("home_blur_brightness_percent")) {
+                    editor.putInt("home_blur_brightness_percent", json.optInt("home_blur_brightness_percent", 82).coerceIn(40, 100))
+                }
+                if (json.has("pause_delay_seconds")) {
+                    val delay = json.optInt("pause_delay_seconds", 5).let { if (it in listOf(5, 15, 30, 60)) it else 5 }
+                    editor.putInt("pause_delay_seconds", delay)
+                }
+                if (json.has("keep_last_cover_on_pause")) {
+                    editor.putBoolean("keep_last_cover_on_pause", json.optBoolean("keep_last_cover_on_pause", false))
+                }
+
+                val importedHomeBlur = if (json.has("home_use_album_blur")) {
+                    json.optBoolean("home_use_album_blur", false)
+                } else {
+                    prefs.getBoolean("home_use_album_blur", false)
+                }
+                var importedLockOnly = if (json.has("lockscreen_only_mode")) {
+                    json.optBoolean("lockscreen_only_mode", false)
+                } else {
+                    prefs.getBoolean("lockscreen_only_mode", false)
+                }
+                if (importedHomeBlur && importedLockOnly) {
+                    importedLockOnly = false
+                }
+                editor.putBoolean("home_use_album_blur", importedHomeBlur)
+                editor.putBoolean("lockscreen_only_mode", importedLockOnly)
+
+                if (json.has("search_mode")) {
+                    val importedMode = json.optInt("search_mode", 0).coerceIn(0, 2)
+                    editor.putInt("search_mode", importedMode)
+                    editor.putBoolean("offline_only_mode", importedMode == 2)
+                } else if (json.has("offline_only_mode")) {
+                    val isOff = json.optBoolean("offline_only_mode", false)
+                    editor.putInt("search_mode", if (isOff) 2 else 0)
+                    editor.putBoolean("offline_only_mode", isOff)
+                }
+
+                if (json.has("wifi_only_animated")) {
+                    editor.putBoolean("wifi_only_animated", json.optBoolean("wifi_only_animated", false))
+                }
+                if (json.has("pause_on_battery_saver")) {
+                    editor.putBoolean("pause_on_battery_saver", json.optBoolean("pause_on_battery_saver", true))
+                }
+                if (json.has("pixel_dynamic_colors")) {
+                    editor.putBoolean("pixel_dynamic_colors", json.optBoolean("pixel_dynamic_colors", false))
+                }
+                if (json.has("update_notifications_enabled")) {
+                    val wantNotif = json.optBoolean("update_notifications_enabled", false) && hasPostNotificationsPermission()
+                    editor.putBoolean("update_notifications_enabled", wantNotif)
+                }
+
+                val excludedJson = json.optJSONArray("excluded_packages")
+                if (excludedJson != null) {
+                    val importedSet = HashSet<String>()
+                    for (i in 0 until excludedJson.length()) {
+                        val pkg = excludedJson.optString(i, "").trim()
+                        if (pkg.isNotEmpty()) importedSet.add(pkg)
+                    }
+                    editor.putStringSet("excluded_packages", importedSet)
+                }
+
+                editor.apply()
+
+                runOnUiThread {
+                    notifySettingsChanged()
+                    Toast.makeText(this, getString(R.string.toast_import_success), Toast.LENGTH_SHORT).show()
+                    recreate()
+                }
+            } catch (_: Throwable) {
+                runOnUiThread {
+                    Toast.makeText(this, getString(R.string.toast_import_error), Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     private fun hasPostNotificationsPermission(): Boolean {
@@ -1450,13 +2111,25 @@ class MainActivity : AppCompatActivity() {
 
         private var topOffsetFrac = 0.20f
         private var blurFrac = 1.00f
+        private var blurSatBoostFrac = 0.00f
         private var expansionFrac = 0.00f
         private var dimFrac = 0.00f
         private var clockGradientEnabled = false
+        private var bottomGradientEnabled = false
+        private var showClockOverlay = true
+
+        private var sharpCoverBitmap: Bitmap? = null
+        private var blurredCoverBitmap: Bitmap? = null
 
         private val clipPath = Path()
         private val frameRect = RectF()
+        private val srcRect = Rect()
+        private val dstRect = RectF()
         private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+        private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        private val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+        }
         private val framePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             color = frameBorderColor
@@ -1475,22 +2148,63 @@ class MainActivity : AppCompatActivity() {
             color = Color.parseColor("#99FFFFFF")
         }
 
+        fun setCoverArtwork(sharp: Bitmap?, blurred: Bitmap?) {
+            sharpCoverBitmap = sharp
+            blurredCoverBitmap = blurred
+            invalidate()
+        }
+
         fun updateParams(
             topOffsetPercent: Int,
             blurPercent: Int,
+            blurSatBoostPercent: Int,
             expansionPercent: Int,
             dimPercent: Int,
-            clockGradient: Boolean
+            clockGradient: Boolean,
+            bottomGradient: Boolean,
+            showClock: Boolean = true
         ) {
             topOffsetFrac = topOffsetPercent.coerceIn(0, 60) / 100f
             blurFrac = blurPercent.coerceIn(60, 100) / 100f
+            blurSatBoostFrac = blurSatBoostPercent.coerceIn(0, 60) / 100f
             expansionFrac = expansionPercent.coerceIn(0, 100) / 100f
             dimFrac = dimPercent.coerceIn(0, 40) / 100f
             clockGradientEnabled = clockGradient
+            bottomGradientEnabled = bottomGradient
+            showClockOverlay = showClock
             invalidate()
         }
 
         private fun lerp(a: Float, b: Float, t: Float): Float = a + (b - a) * t
+
+        private fun boostColorSaturation(color: Int, boostFrac: Float): Int {
+            if (boostFrac <= 0.001f) return color
+            val hsv = FloatArray(3)
+            Color.colorToHSV(color, hsv)
+            hsv[1] = (hsv[1] * (1f + boostFrac * 1.15f)).coerceIn(0f, 1f)
+            return Color.HSVToColor(hsv)
+        }
+
+        private fun drawBitmapCenterCrop(canvas: Canvas, bmp: Bitmap, target: RectF, paint: Paint) {
+            val bw = bmp.width.toFloat()
+            val bh = bmp.height.toFloat()
+            val tw = target.width()
+            val th = target.height()
+            if (bw <= 0f || bh <= 0f || tw <= 0f || th <= 0f) return
+
+            val bmpAspect = bw / bh
+            val targetAspect = tw / th
+            if (bmpAspect > targetAspect) {
+                val cropW = (bh * targetAspect).toInt().coerceIn(1, bmp.width)
+                val left = (bmp.width - cropW) / 2
+                srcRect.set(left, 0, left + cropW, bmp.height)
+            } else {
+                val cropH = (bw / targetAspect).toInt().coerceIn(1, bmp.height)
+                val top = (bmp.height - cropH) / 2
+                srcRect.set(0, top, bmp.width, top + cropH)
+            }
+            canvas.drawBitmap(bmp, srcRect, target, paint)
+        }
 
         override fun onDraw(canvas: Canvas) {
             super.onDraw(canvas)
@@ -1507,31 +2221,6 @@ class MainActivity : AppCompatActivity() {
             clipPath.addRoundRect(frameRect, cornerRadius, cornerRadius, Path.Direction.CW)
             canvas.clipPath(clipPath)
 
-            val blurSoftness = ((blurFrac - 0.6f) / 0.4f).coerceIn(0f, 1f)
-            val bgTopColor = Color.rgb(
-                (52 + blurSoftness * 18).toInt(),
-                (76 + blurSoftness * 16).toInt(),
-                (118 + blurSoftness * 14).toInt()
-            )
-            val bgMidColor = Color.rgb(
-                (96 + blurSoftness * 10).toInt(),
-                (64 + blurSoftness * 12).toInt(),
-                (108 + blurSoftness * 10).toInt()
-            )
-            val bgBotColor = Color.rgb(
-                (38 + blurSoftness * 12).toInt(),
-                (44 + blurSoftness * 14).toInt(),
-                (72 + blurSoftness * 14).toInt()
-            )
-            fillPaint.shader = LinearGradient(
-                0f, 0f, w, h,
-                intArrayOf(bgTopColor, bgMidColor, bgBotColor),
-                floatArrayOf(0f, 0.52f, 1f),
-                Shader.TileMode.CLAMP
-            )
-            canvas.drawRect(frameRect, fillPaint)
-            fillPaint.shader = null
-
             val baseBoxAspect = 3f / 4f
             val baseHeightRatio = ((w / baseBoxAspect) / h).coerceIn(0.45f, 0.68f)
             val targetHeightRatio = lerp(baseHeightRatio, 0.95f, expansionFrac)
@@ -1541,49 +2230,139 @@ class MainActivity : AppCompatActivity() {
             val coverHeight = targetHeightRatio * h
             val coverBottom = coverTop + coverHeight
 
-            canvas.save()
-            canvas.clipRect(0f, coverTop, w, coverBottom)
+            val fadeBand = lerp(0.15f, 0.045f, expansionFrac) * coverHeight
+            val bottomFadeBand = lerp(0.18f, 0.06f, expansionFrac) * coverHeight
 
-            fillPaint.shader = LinearGradient(
-                0f, coverTop, w, coverBottom,
-                intArrayOf(
-                    Color.parseColor("#5C7AEA"),
-                    Color.parseColor("#A66CFF"),
-                    Color.parseColor("#F2789F")
-                ),
-                floatArrayOf(0f, 0.55f, 1f),
-                Shader.TileMode.CLAMP
-            )
-            canvas.drawRect(0f, coverTop, w, coverBottom, fillPaint)
-            fillPaint.shader = null
+            val realSharp = sharpCoverBitmap
+            val realBlur = blurredCoverBitmap
 
-            val cx = w * 0.5f
-            val cy = coverTop + coverHeight * 0.5f
-            val discRadius = (w * 0.31f)
-            fillPaint.color = Color.parseColor("#33FFFFFF")
-            canvas.drawCircle(cx, cy, discRadius, fillPaint)
-            fillPaint.color = Color.parseColor("#440D0F14")
-            canvas.drawCircle(cx, cy, discRadius * 0.42f, fillPaint)
-            fillPaint.color = Color.parseColor("#99FFFFFF")
-            canvas.drawCircle(cx, cy, discRadius * 0.14f, fillPaint)
-            canvas.restore()
+            if (realSharp != null && !realSharp.isRecycled && realBlur != null && !realBlur.isRecycled) {
+                if (blurSatBoostFrac > 0.001f) {
+                    val cm = ColorMatrix().apply { setSaturation(1f + blurSatBoostFrac) }
+                    bitmapPaint.colorFilter = ColorMatrixColorFilter(cm)
+                } else {
+                    bitmapPaint.colorFilter = null
+                }
+                drawBitmapCenterCrop(canvas, realBlur, frameRect, bitmapPaint)
+                bitmapPaint.colorFilter = null
 
-            val fadeBand = lerp(0.11f, 0.04f, expansionFrac) * coverHeight
-            val bottomFadeBand = lerp(0.15f, 0.05f, expansionFrac) * coverHeight
+                dstRect.set(0f, coverTop, w, coverBottom)
+                val layerId = canvas.saveLayer(dstRect, null)
+                drawBitmapCenterCrop(canvas, realSharp, dstRect, bitmapPaint)
 
-            if (topOffset > 0.005f) {
-                fillPaint.shader = LinearGradient(
-                    0f, coverTop - 2f, 0f, coverTop + fadeBand,
-                    bgTopColor, Color.TRANSPARENT, Shader.TileMode.CLAMP
+                val topFadeEndFrac = if (topOffset > 0.005f) (fadeBand / coverHeight).coerceIn(0.01f, 0.45f) else 0f
+                val bottomFadeStartFrac = if ((topOffset + targetHeightRatio) < 0.995f) {
+                    (1f - (bottomFadeBand / coverHeight)).coerceIn(0.55f, 0.99f)
+                } else {
+                    1f
+                }
+
+                val colors = when {
+                    topFadeEndFrac > 0f && bottomFadeStartFrac < 1f ->
+                        intArrayOf(Color.TRANSPARENT, Color.BLACK, Color.BLACK, Color.TRANSPARENT)
+                    topFadeEndFrac > 0f ->
+                        intArrayOf(Color.TRANSPARENT, Color.BLACK, Color.BLACK)
+                    bottomFadeStartFrac < 1f ->
+                        intArrayOf(Color.BLACK, Color.BLACK, Color.TRANSPARENT)
+                    else ->
+                        intArrayOf(Color.BLACK, Color.BLACK)
+                }
+                val positions = when {
+                    topFadeEndFrac > 0f && bottomFadeStartFrac < 1f ->
+                        floatArrayOf(0f, topFadeEndFrac, bottomFadeStartFrac, 1f)
+                    topFadeEndFrac > 0f ->
+                        floatArrayOf(0f, topFadeEndFrac, 1f)
+                    bottomFadeStartFrac < 1f ->
+                        floatArrayOf(0f, bottomFadeStartFrac, 1f)
+                    else ->
+                        floatArrayOf(0f, 1f)
+                }
+
+                maskPaint.shader = LinearGradient(
+                    0f, coverTop, 0f, coverBottom,
+                    colors, positions, Shader.TileMode.CLAMP
                 )
-                canvas.drawRect(0f, coverTop - 2f, w, coverTop + fadeBand, fillPaint)
+                canvas.drawRect(dstRect, maskPaint)
+                maskPaint.shader = null
+                canvas.restoreToCount(layerId)
+            } else {
+                val blurSoftness = ((blurFrac - 0.6f) / 0.4f).coerceIn(0f, 1f)
+                val bgTopColor = boostColorSaturation(
+                    Color.rgb(
+                        (52 + blurSoftness * 18).toInt(),
+                        (76 + blurSoftness * 16).toInt(),
+                        (118 + blurSoftness * 14).toInt()
+                    ),
+                    blurSatBoostFrac
+                )
+                val bgMidColor = boostColorSaturation(
+                    Color.rgb(
+                        (96 + blurSoftness * 10).toInt(),
+                        (64 + blurSoftness * 12).toInt(),
+                        (108 + blurSoftness * 10).toInt()
+                    ),
+                    blurSatBoostFrac
+                )
+                val bgBotColor = boostColorSaturation(
+                    Color.rgb(
+                        (38 + blurSoftness * 12).toInt(),
+                        (44 + blurSoftness * 14).toInt(),
+                        (72 + blurSoftness * 14).toInt()
+                    ),
+                    blurSatBoostFrac
+                )
+                fillPaint.shader = LinearGradient(
+                    0f, 0f, w, h,
+                    intArrayOf(bgTopColor, bgMidColor, bgBotColor),
+                    floatArrayOf(0f, 0.52f, 1f),
+                    Shader.TileMode.CLAMP
+                )
+                canvas.drawRect(frameRect, fillPaint)
+                fillPaint.shader = null
+
+                canvas.save()
+                canvas.clipRect(0f, coverTop, w, coverBottom)
+
+                fillPaint.shader = LinearGradient(
+                    0f, coverTop, w, coverBottom,
+                    intArrayOf(
+                        Color.parseColor("#5C7AEA"),
+                        Color.parseColor("#A66CFF"),
+                        Color.parseColor("#F2789F")
+                    ),
+                    floatArrayOf(0f, 0.55f, 1f),
+                    Shader.TileMode.CLAMP
+                )
+                canvas.drawRect(0f, coverTop, w, coverBottom, fillPaint)
+                fillPaint.shader = null
+
+                val cx = w * 0.5f
+                val cy = coverTop + coverHeight * 0.5f
+                val discRadius = (w * 0.31f)
+                fillPaint.color = Color.parseColor("#33FFFFFF")
+                canvas.drawCircle(cx, cy, discRadius, fillPaint)
+                fillPaint.color = Color.parseColor("#440D0F14")
+                canvas.drawCircle(cx, cy, discRadius * 0.42f, fillPaint)
+                fillPaint.color = Color.parseColor("#99FFFFFF")
+                canvas.drawCircle(cx, cy, discRadius * 0.14f, fillPaint)
+                canvas.restore()
+
+                if (topOffset > 0.005f) {
+                    fillPaint.shader = LinearGradient(
+                        0f, coverTop - 2f, 0f, coverTop + fadeBand,
+                        bgTopColor, Color.TRANSPARENT, Shader.TileMode.CLAMP
+                    )
+                    canvas.drawRect(0f, coverTop - 2f, w, coverTop + fadeBand, fillPaint)
+                }
+                if ((topOffset + targetHeightRatio) < 0.995f) {
+                    fillPaint.shader = LinearGradient(
+                        0f, coverBottom - bottomFadeBand, 0f, coverBottom + 2f,
+                        Color.TRANSPARENT, bgBotColor, Shader.TileMode.CLAMP
+                    )
+                    canvas.drawRect(0f, coverBottom - bottomFadeBand, w, coverBottom + 2f, fillPaint)
+                }
+                fillPaint.shader = null
             }
-            fillPaint.shader = LinearGradient(
-                0f, coverBottom - bottomFadeBand, 0f, coverBottom + 2f,
-                Color.TRANSPARENT, bgBotColor, Shader.TileMode.CLAMP
-            )
-            canvas.drawRect(0f, coverBottom - bottomFadeBand, w, coverBottom + 2f, fillPaint)
-            fillPaint.shader = null
 
             if (dimFrac > 0.001f) {
                 fillPaint.color = Color.argb((dimFrac * 255f).toInt().coerceIn(0, 255), 0, 0, 0)
@@ -1601,17 +2380,30 @@ class MainActivity : AppCompatActivity() {
                 fillPaint.shader = null
             }
 
+            if (bottomGradientEnabled) {
+                fillPaint.shader = LinearGradient(
+                    0f, h * 0.85f, 0f, h,
+                    Color.TRANSPARENT,
+                    Color.argb((0.42f * 255f).toInt(), 0, 0, 0),
+                    Shader.TileMode.CLAMP
+                )
+                canvas.drawRect(0f, h * 0.85f, w, h, fillPaint)
+                fillPaint.shader = null
+            }
+
             val camRadius = 3.2f * density
             fillPaint.color = Color.parseColor("#AA0D0F14")
             canvas.drawCircle(w * 0.5f, 10f * density, camRadius, fillPaint)
 
-            clockPaint.textSize = 27f * density
-            clockPaint.setShadowLayer(4f * density, 0f, 1.5f * density, Color.parseColor("#55000000"))
-            canvas.drawText("09:41", w * 0.5f, h * 0.21f, clockPaint)
+            if (showClockOverlay) {
+                clockPaint.textSize = 27f * density
+                clockPaint.setShadowLayer(4f * density, 0f, 1.5f * density, Color.parseColor("#55000000"))
+                canvas.drawText("09:41", w * 0.5f, h * 0.21f, clockPaint)
 
-            datePaint.textSize = 8.5f * density
-            datePaint.setShadowLayer(3f * density, 0f, 1f * density, Color.parseColor("#55000000"))
-            canvas.drawText(sampleDateText, w * 0.5f, h * 0.255f, datePaint)
+                datePaint.textSize = 8.5f * density
+                datePaint.setShadowLayer(3f * density, 0f, 1f * density, Color.parseColor("#55000000"))
+                canvas.drawText(sampleDateText, w * 0.5f, h * 0.255f, datePaint)
+            }
 
             val pillW = w * 0.34f
             val pillH = 2.6f * density
@@ -2609,6 +3401,7 @@ class MainActivity : AppCompatActivity() {
         updateExcludedButtonCount()
         updateDiagnosticUI()
         updateCacheSizeUI()
+        loadLatestCachedCoverForPreview()
     }
 
     private fun isNotificationListenerEnabled(): Boolean {
@@ -2697,6 +3490,8 @@ class MainActivity : AppCompatActivity() {
                 pickLockscreenImageRequest -> showCropDialogForUri(uri, "default_wallpaper.png")
                 pickHomeImageRequest -> showCropDialogForUri(uri, "home_wallpaper.png")
                 pickHomeBlurImageRequest -> showCropDialogForUri(uri, "home_blur_wallpaper.png")
+                exportSettingsRequest -> exportSettingsToUri(uri)
+                importSettingsRequest -> importSettingsFromUri(uri)
             }
         }
     }

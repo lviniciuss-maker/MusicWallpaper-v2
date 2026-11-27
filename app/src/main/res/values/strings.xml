@@ -28,8 +28,13 @@
     <string name="search_apps_hint">Search app name...</string>
     <string name="btn_done">Done</string>
 
-    <string name="chk_local_only_title">Use notification artwork only (Offline Mode)</string>
-    <string name="chk_local_only_desc">Skips online animated/iTunes search and uses the exact cover embedded in your media player notification.</string>
+    <string name="search_mode_title">Artwork Search Mode</string>
+    <string name="search_mode_online">Online</string>
+    <string name="search_mode_auto">Auto</string>
+    <string name="search_mode_offline">Offline</string>
+    <string name="search_mode_desc_online">Always searches online for official animated (.m3u8) and high-res covers.</string>
+    <string name="search_mode_desc_auto">Smart mode: uses cached covers normally, but switches directly to local notification artwork on slow or unstable connections.</string>
+    <string name="search_mode_desc_offline">100% Offline: skips all online searches and uses exclusively the cover embedded in your media player notification.</string>
 
     <string name="chk_wifi_only_title">Animated covers on Wi-Fi only</string>
     <string name="chk_wifi_only_desc">Saves mobile data by using static album covers on 4G/5G and playing animated .m3u8 videos only on Wi-Fi.</string>
@@ -76,23 +81,37 @@
 
     <string name="card_pos_title">3. Artwork &amp; Blur Adjustments</string>
     <string name="preview_caption">Live Lockscreen Preview</string>
+    <string name="preview_caption_home">Live Home Screen Preview</string>
     <string name="preview_date_sample">Sat, Nov 21</string>
-    <string name="pos_label_format">Vertical Position (from top): %1$d%%</string>
+    <string name="pos_label_format">Vertical Position (Lockscreen): %1$d%%</string>
+    <string name="home_pos_label_format">Vertical Position (Home Screen): %1$d%%</string>
+    <string name="landscape_pos_label_format">Horizontal Position (Landscape / Tablet): %1$d%%</string>
     <string name="blur_label_format">Blur Intensity: %1$d%%</string>
+    <string name="blur_sat_label_format">Blur Saturation Boost: %1$d%%</string>
     <string name="expand_label_format">Cover Expansion (up to 95%% screen): %1$d%%</string>
     <string name="dim_label_format">Cover Dimming: %1$d%%</string>
     <string name="chk_clock_gradient_title">Top gradient shadow for clock</string>
     <string name="chk_clock_gradient_desc">Adds a subtle dark vignette at the top of the Lockscreen to improve clock readability on bright album covers.</string>
+    <string name="chk_bottom_gradient_title">Bottom gradient shadow (footer)</string>
+    <string name="chk_bottom_gradient_desc">Adds a subtle dark fade along the bottom 15% of the screen to improve contrast for shortcuts, fingerprint icon, and charging info.</string>
     <string name="chk_static_zoom_title">Subtle zoom animation on static covers</string>
     <string name="chk_static_zoom_desc">Applies a gentle zoom in/out breathing effect when an album has no animated artwork available.</string>
     <string name="static_zoom_speed_title">Zoom animation speed</string>
     <string name="static_zoom_speed_fast">Fast (8s)</string>
     <string name="static_zoom_speed_medium">Medium (12s)</string>
     <string name="static_zoom_speed_slow">Slow (18s)</string>
+    <string name="static_zoom_intensity_title">Zoom animation intensity</string>
     <string name="btn_reset_pos">Reset Adjustments to Default</string>
 
     <string name="btn_activate_wallpaper">Activate Live Wallpaper</string>
     <string name="toast_error_generic">Could not open system screen</string>
+
+    <string name="btn_export_settings">📤 Export (.json)</string>
+    <string name="btn_import_settings">📥 Import (.json)</string>
+    <string name="toast_export_success">Settings exported successfully!</string>
+    <string name="toast_export_error">Could not export settings.</string>
+    <string name="toast_import_success">Settings imported successfully!</string>
+    <string name="toast_import_error">Invalid or unreadable settings file.</string>
 
     <string name="crop_dialog_title">Adjust Wallpaper Crop</string>
     <string name="crop_dialog_hint">Drag with 1 finger to move • Pinch with 2 fingers to zoom</string>
@@ -136,7 +155,7 @@
     <string name="faq_a5">In Card 1 (Music Detection), tap \"Ignored Apps\" and check any video players, social media apps, or browsers you don\'t want MusicWallpaper to track.</string>
 
     <string name="faq_q6">6. Why are some songs static or take a few seconds to update on slow Wi-Fi?</string>
-    <string name="faq_a6">Not all albums have official animated artwork in Apple Music. When unavailable, the app automatically downloads the 1000x1000 static cover or uses your player\'s notification artwork. On slow connections, the previous cover stays smoothly on screen while automatic 2s and 4s checks load the new artwork.</string>
+    <string name="faq_a6">Not all albums have official animated artwork in Apple Music. When unavailable, the app automatically downloads the 1000x1000 static cover or uses your player\'s notification artwork. On slow connections, you can switch Artwork Search Mode to \"Auto\" to fall back instantly to the player\'s cover.</string>
 
     <string name="faq_q7">7. Does keeping the animated cover on pause or using Home Screen Diffusion drain a lot of battery?</string>
     <string name="faq_a7">No. Both the video decoder (ExoPlayer) and GPU blur passes automatically pause whenever the screen turns off. On the Home Screen with Diffusion enabled, the crossfade lasts 260ms and video playback pauses right after, keeping battery usage virtually zero.</string>
